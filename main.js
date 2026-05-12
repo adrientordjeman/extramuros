@@ -522,8 +522,11 @@ window.updateWalkingPath = async function (props) {
                 const pathMarkers = [];
 
                 const shouldBeVisible = (window.activeAccordion === 'commute' && target.type === 'workplace') ||
-                    (window.activeAccordion === 'vieQuartier' && target.type === 'center') ||
-                    ((window.activeAccordion === 'mobility' || window.activeAccordion === 'infra') && target.type === 'station');
+                    (window.activeAccordion === 'vieQuartier' && target.type === 'center');
+
+                // On force l'opacité à 0 pour les stations en mode mobilité (le Hover s'occupera de l'afficher)
+                const isMobilityOrInfraMode = (window.activeAccordion === 'mobility' || window.activeAccordion === 'infra');
+                const initialOpacity = (isMobilityOrInfraMode && target.type === 'station') ? 0 : (shouldBeVisible ? 0.8 : 0);
 
                 sections.forEach((sec, sIdx) => {
                     const isTransit = ['rer', 'metro', 'bus', 'train', 'tram'].includes(sec.type);
@@ -531,7 +534,7 @@ window.updateWalkingPath = async function (props) {
                         color: sec.color || target.color,
                         weight: isTransit ? 6 : 5,
                         dashArray: isTransit ? 'none' : '3, 10',
-                        opacity: shouldBeVisible ? (isTransit ? 1 : 0.8) : 0,
+                        opacity: initialOpacity,
                         lineJoin: 'round',
                         pane: 'walkingPathsPane',
                         className: `walking-path ${pathId} sec-${sIdx}`,
@@ -1448,54 +1451,52 @@ window.highlightPathByName = function (name) {
 };
 
 window.updateContextualMap = function (categoryId) {
-    const mappings = {
-        'immo': { checks: { 'show-transactions': true }, pills: ['pill-group-immo', 'pill-group-maps'] },
-        'mobility': { checks: { 'group-mobilite': true }, pills: ['pill-group-mobility'] },
-        'commute': { checks: {}, pills: ['pill-group-mobility'] },
-        'urbanisme': { checks: { 'show-espaces-verts': true, 'show-osm-context': true }, pills: ['pill-group-maps'] },
-        'vieQuartier': { checks: { 'group-commerces': true, 'group-sorties': true, 'group-sante': true, 'show-centre-ville': true }, pills: ['pill-group-commerces', 'pill-group-sorties', 'pill-group-sante', 'pill-group-maps'] },
-        'infra': { checks: { 'group-infra': true }, pills: ['pill-group-infra'] },
-        'education': { checks: { 'show-schools': true }, pills: ['pill-group-infra'] },
-        'safety': { checks: { 'show-qpv': true, 'show-zsp': true }, pills: ['pill-group-maps'] }
-    };
+    // 1. Cacher visuellement les pastilles pour le reset
+    document.querySelectorAll('.context-pill').forEach(p => p.classList.add('hidden'));
 
-    if (categoryId && mappings[categoryId]) {
-        // 1. Reset rapide
-        Object.keys(mappings).forEach(catId => {
-            if (mappings[catId].checks) {
-                Object.keys(mappings[catId].checks).forEach(id => {
+    // 2. Laisser l'UI respirer 100ms
+    setTimeout(() => {
+        const mappings = {
+            'immo': { 'show-transactions': true },
+            'mobility': { 'group-mobilite': true },
+            'commute': {},
+            'urbanisme': { 'show-espaces-verts': true, 'show-osm-context': true },
+            'vieQuartier': { 'show-centre-ville': true },
+            'infra': { 'group-infra': true },
+            'education': { 'show-schools': true },
+            'safety': { 'show-qpv': true, 'show-zsp': true }
+        };
+
+        const config = mappings[categoryId];
+        if (config) {
+            // A. Tout décocher d'abord (Reset propre)
+            Object.values(mappings).forEach(mapGroup => {
+                for (const id in mapGroup) {
                     const el = document.getElementById(id);
                     if (el) el.checked = false;
-                });
-            }
-        });
+                }
+            });
 
-        // 2. Application du nouveau contexte
-        const config = mappings[categoryId];
-        if (config.checks) {
-            for (const [id, state] of Object.entries(config.checks)) {
+            // B. Cocher uniquement ce qui concerne la catégorie cliquée
+            for (const [id, state] of Object.entries(config)) {
                 const el = document.getElementById(id);
                 if (el) el.checked = state;
             }
+
+            // C. Lancer TOUTES les mises à jour cartographiques (Finis les "//")
+            requestAnimationFrame(() => {
+                if (window.renderActiveLayers) window.renderActiveLayers();
+                if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
+                if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
+                if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
+                if (window.updateQPVVisibility) window.updateQPVVisibility();
+                if (window.updateZSPVisibility) window.updateZSPVisibility();
+                if (window.updateEspacesVertsVisibility) window.updateEspacesVertsVisibility();
+                if (window.updateNoiseVisibility) window.updateNoiseVisibility();
+                if (window.updatePathsVisibility) window.updatePathsVisibility();
+            });
         }
-
-        // 3. Appels asynchrones NON bloquants
-        // Au lieu de tout bloquer, on lance les updates en parallèle
-        requestAnimationFrame(() => {
-            window.renderActiveLayers();
-            if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
-            if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
-            if (window.updateQPVVisibility) window.updateQPVVisibility();
-            if (window.updateZSPVisibility) window.updateZSPVisibility();
-            if (window.updateEspacesVertsVisibility) window.updateEspacesVertsVisibility();
-            if (window.updateNoiseVisibility) window.updateNoiseVisibility();
-            if (window.updatePathsVisibility) window.updatePathsVisibility();
-        });
-
-    }
-
-    // Refresh IRIS style 
-    if (window.geojsonLayer) window.geojsonLayer.setStyle(style);
+    }, 100);
 };
 
 window.toggleAccordion = function (id) {
@@ -4116,27 +4117,35 @@ window.updateMairiesVisibility = () => {
     renderActiveLayers();
 };
 
-window.updateCentreVilleVisibility = () => {
+let cityCentersCachedLayer = null;
+
+window.updateCentreVilleVisibility = async () => {
     const show = document.getElementById('show-centre-ville')?.checked;
     const legend = document.getElementById('city-centers-legend');
 
+    // 1. Gestion de la légende
     if (legend) {
         if (show) legend.classList.remove('hidden');
         else legend.classList.add('hidden');
     }
 
-    if (!window.centreVilleLayer) return;
+    // 2. Initialisation du calque
+    if (!window.centreVilleLayer) {
+        window.centreVilleLayer = L.layerGroup().addTo(window.map);
+    }
+
     window.centreVilleLayer.clearLayers();
 
-    if (!window.activeCommuneName) return;
+    // 3. Verrous de visibilité (Checkbox et Zoom)
+    if (!show) return;
 
     const zoom = window.map.getZoom();
-    if (zoom < 12) return; // Hide completely if too far
+    if (zoom < 11) return; // Ne rien afficher si on est trop dézoomé
 
     const isSimplified = zoom < 14;
+    const bounds = window.map.getBounds();
 
-    console.log("✨ Rendering magnetic attractivity perimeters for", window.activeCommuneName, "Zoom:", zoom, "Simplified:", isSimplified);
-
+    // 4. Styles visuels par catégorie
     const personaStyles = {
         "Pôle de Mobilité": { color: '#8b5cf6', fill: '#a78bfa', icon: '🚉' },
         "Cœur Historique": { color: '#f59e0b', fill: '#fbbf24', icon: '🏺' },
@@ -4145,17 +4154,23 @@ window.updateCentreVilleVisibility = () => {
         "Pôle de Vie": { color: '#10b981', fill: '#34d399', icon: '🌱' }
     };
 
+    // 5. Boucle sur les données
     (window.cityCentersData.features || []).forEach(feature => {
         const props = feature.properties;
-        const name = props.name || "";
-        if (window.activeCommuneName && !name.includes(window.activeCommuneName)) return;
 
         try {
+            // CALCUL SPATIAL : On récupère le centre pour savoir s'il est à l'écran
+            const centroid = turf.centroid(feature).geometry.coordinates;
+            const latlng = [centroid[1], centroid[0]];
+
+            // OPTIMISATION : On ne dessine que ce qui est visible sur la carte actuelle
+            if (!bounds.contains(latlng)) return;
+
             const s = personaStyles[props.persona] || personaStyles["Pôle de Vie"];
 
-            // Render polygon only if zoomed in or if it's a very large area (optional)
+            // A. DESSIN DE LA FRONTIÈRE (Polygone)
             if (zoom >= 13) {
-                const geoLayer = L.geoJSON(feature, {
+                L.geoJSON(feature, {
                     pane: 'cityCentersPane',
                     interactive: false,
                     style: {
@@ -4163,13 +4178,13 @@ window.updateCentreVilleVisibility = () => {
                         weight: isSimplified ? 1 : 3,
                         opacity: isSimplified ? 0.4 : 0.8,
                         fillColor: s.fill,
-                        fillOpacity: isSimplified ? 0.05 : 0.2
+                        fillOpacity: isSimplified ? 0.05 : 0.2,
+                        dashArray: '6, 6'
                     }
                 }).addTo(window.centreVilleLayer);
             }
 
-            const centroid = turf.centroid(feature).geometry.coordinates;
-
+            // B. PRÉPARATION DES PILLS (Rosace)
             const pills = [
                 { key: 'boulangerie_count', icon: '🍞', label: 'Boulangerie' },
                 { key: 'boucherie_count', icon: '🥩', label: 'Boucherie' },
@@ -4215,7 +4230,8 @@ window.updateCentreVilleVisibility = () => {
                 `;
             }).join('');
 
-            const marker = L.marker([centroid[1], centroid[0]], {
+            // C. CRÉATION DU MARQUEUR INTERACTIF
+            const marker = L.marker(latlng, {
                 pane: 'cityCentersPane',
                 icon: L.divIcon({
                     className: `city-center-marker ${isSimplified ? 'simplified' : ''}`,
@@ -4241,10 +4257,12 @@ window.updateCentreVilleVisibility = () => {
                 })
             }).addTo(window.centreVilleLayer);
 
+            // D. ÉVÉNEMENTS (Hover & Clic)
             marker.on('mouseover', () => {
                 const path = window.activeWalkingPaths?.find(p => p.name === props.name);
                 if (path) window.highlightPath(path.id, true);
             });
+
             marker.on('mouseout', () => {
                 const path = window.activeWalkingPaths?.find(p => p.name === props.name);
                 if (path) window.highlightPath(path.id, false);
@@ -4253,29 +4271,20 @@ window.updateCentreVilleVisibility = () => {
             marker.on('click', (e) => {
                 L.DomEvent.stopPropagation(e);
                 const el = marker.getElement().querySelector('.city-center-marker-container');
-                const isActive = el.classList.contains('active');
 
-                // Close all other active markers
+                // On ferme les autres avant d'ouvrir celui-ci
                 document.querySelectorAll('.city-center-marker-container.active').forEach(c => {
                     if (c !== el) c.classList.remove('active');
                 });
 
                 el.classList.toggle('active');
-
-                // If opening, maybe zoom a bit?
-                if (el.classList.contains('active')) {
-                    // window.map.setView([centroid[1], centroid[0]], Math.max(window.map.getZoom(), 15));
-                }
             });
 
-            // Marker is already added above at line 4318
         } catch (e) {
-            console.warn("Could not draw marker for center", e);
+            console.warn("Erreur de rendu pour le pôle :", props.name, e);
         }
     });
 };
-
-
 
 window.updateBudgetDisplay = () => {
     const budget = parseInt(document.getElementById('budget-input').value);
@@ -4318,8 +4327,8 @@ function renderActiveLayers() {
 
     // Zoom thresholds (more permissive if a city is selected)
     const isActiveCity = window.activeCommuneCodes && window.activeCommuneCodes.length > 0;
-    const showBasePoints = zoom >= 14 || (isActiveCity && zoom >= 12);
-    const showDetailedPoints = zoom >= 14.5 || (isActiveCity && zoom >= 12.5);
+    const showBasePoints = zoom >= 13 || (isActiveCity && zoom >= 11);
+    const showDetailedPoints = zoom >= 15 || (isActiveCity && zoom >= 14.5);
 
     // --- 1. Gestion des calques globaux (Lignes, Bruit, Espaces Verts...) ---
     const showStations = document.getElementById('show-stations')?.checked;
@@ -4365,12 +4374,12 @@ function renderActiveLayers() {
     window.gpeLayer.clearLayers();
 
     // Si on est trop dézoomé, on s'arrête là (sauf si une ville est sélectionnée)
-    if (zoom < 14 && !isActiveCity) {
+    if (zoom < 13 && !isActiveCity) { // <--- ICI on passe à 13
         if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
         if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
         if (window.updateWalkingLabelsZoom) window.updateWalkingLabelsZoom();
 
-        if (zoom < 13 && window.walkingPathsGroup) {
+        if (zoom < 12 && window.walkingPathsGroup) {
             window.walkingPathsGroup.clearLayers();
         }
         return;
