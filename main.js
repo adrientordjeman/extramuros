@@ -88,7 +88,7 @@ const CATEGORY_SOURCES = {
     ]
 };
 
-window.toggleSources = function(id, event) {
+window.toggleSources = function (id, event) {
     if (event) {
         event.stopPropagation();
         event.preventDefault();
@@ -224,7 +224,7 @@ function getNearbyPoints(insee, maxDistance = 800) {
     const results = { commerces: [], amenities: [], schools: [], stations: [], sport: [], culture: [], marche: [], riviera: [] };
     if (!window.pointsByInsee || !window.irisCentroids) return results;
     if (!window.irisGrid) buildIrisGrid();
-    
+
     const center = window.irisCentroids[insee];
     if (!center) return results;
 
@@ -268,7 +268,7 @@ function getNearbyPoints(insee, maxDistance = 800) {
             results[key].forEach(p => {
                 const [pLon, pLat] = p.geometry.coordinates;
                 const pName = p.properties.name || "";
-                
+
                 const existingIdx = deduped.findIndex(k => {
                     const [kLon, kLat] = k.geometry.coordinates;
                     // Cluster threshold: 50m for amenities/commerces, 100m for schools
@@ -292,10 +292,10 @@ function getNearbyPoints(insee, maxDistance = 800) {
 
 function getDistance(lat1, lon1, lat2, lon2) {
     const R = 6371e3;
-    const f1 = lat1 * Math.PI/180, f2 = lat2 * Math.PI/180;
-    const df = (lat2-lat1) * Math.PI/180, dl = (lon2-lon1) * Math.PI/180;
-    const a = Math.sin(df/2)**2 + Math.cos(f1)*Math.cos(f2)*Math.sin(dl/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const f1 = lat1 * Math.PI / 180, f2 = lat2 * Math.PI / 180;
+    const df = (lat2 - lat1) * Math.PI / 180, dl = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(df / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 
@@ -326,21 +326,21 @@ function decodePolyline(str, precision = 6) {
     return coordinates;
 }
 
-window.updateWalkingPath = async function(props) {
+window.updateWalkingPath = async function (props) {
     if (!window.walkingPathsGroup) {
         window.walkingPathsGroup = L.layerGroup().addTo(window.map);
     }
     window.walkingPathsGroup.clearLayers();
     window.activeWalkingPaths = []; // Store paths for sidebar
-    
+
     window.lastWalkingDuration = null;
     window.lastWalkingTarget = null;
-    
+
     const startLat = props.lat;
     const startLon = props.lon;
     const targets = [];
-    
-    const lineStations = {}; 
+
+    const lineStations = {};
     const closestCenters = {};
 
     // 1. All City Centers within 2.5km (deduplicated by name)
@@ -350,11 +350,11 @@ window.updateWalkingPath = async function(props) {
         if (dist <= 2500) {
             const name = f.properties.name;
             if (!closestCenters[name] || dist < closestCenters[name].dist) {
-                closestCenters[name] = { 
-                    name, 
-                    lat: centroid[1], 
-                    lon: centroid[0], 
-                    dist, 
+                closestCenters[name] = {
+                    name,
+                    lat: centroid[1],
+                    lon: centroid[0],
+                    dist,
                     type: 'center',
                     color: name.includes('Historique') ? '#b45309' : '#2563eb',
                     icon: '📍'
@@ -370,7 +370,7 @@ window.updateWalkingPath = async function(props) {
         if (dist <= 2500) {
             // Robustly split multiple lines (e.g., "1,14" or "L/J")
             const rawLines = String(s.lines).split(/[,\/;]/).map(l => l.trim()).filter(Boolean);
-            
+
             rawLines.forEach(rawLine => {
                 const lineId = window.getLineId(rawLine);
                 if (!lineId) return;
@@ -381,11 +381,11 @@ window.updateWalkingPath = async function(props) {
                     const idfm = idfmColors[lineId];
                     if (idfm) transitColor = idfm.bg;
 
-                    lineStations[lineId] = { 
-                        name: s.name, 
-                        lat: s.lat, 
-                        lon: s.lon, 
-                        dist, 
+                    lineStations[lineId] = {
+                        name: s.name,
+                        lat: s.lat,
+                        lon: s.lon,
+                        dist,
                         type: 'station',
                         color: transitColor,
                         icon: (s.mode === 'METRO' || s.mode === 'METROPOLITAIN') ? '🚇' : (['RER', 'TRAIN', 'RER/TRAIN'].includes(s.mode) ? '🚆' : '🚋'),
@@ -448,10 +448,10 @@ window.updateWalkingPath = async function(props) {
             let tripLength = 0;
             const startLat = props.lat;
             const startLon = props.lon;
-            
+
             // Try cache first
             const cached = window.precomputedJourneysRaw?.[props.code]?.[target.id];
-                
+
             if (cached && cached.sections) {
                 sections = cached.sections;
                 duration = cached.duration;
@@ -465,7 +465,7 @@ window.updateWalkingPath = async function(props) {
                     const url = `https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/journeys?from=${startLon};${startLat}&to=${target.lon};${target.lat}&data_freshness=base_schedule`;
                     const response = await fetch(url, { headers: { 'apikey': '41Yg0ZQ1MuGlIHfwEXrY0vGFhjQKngcv' } });
                     const data = await response.json();
-                    
+
                     if (data.journeys && data.journeys.length > 0) {
                         const j = data.journeys[0];
                         duration = Math.round(j.duration / 60);
@@ -476,7 +476,7 @@ window.updateWalkingPath = async function(props) {
                             } else if (s.type === 'street_network' && s.geojson) {
                                 sectionShape = s.geojson.coordinates.filter(c => c[0] !== null && c[1] !== null).map(c => [c[1], c[0]]);
                             }
-                            
+
                             if (sectionShape.length > 0) {
                                 let type = s.type;
                                 let color = '#94a3b8';
@@ -492,13 +492,13 @@ window.updateWalkingPath = async function(props) {
                                     else if (mode.includes('tram') || net.includes('tram')) type = 'tram';
                                     else if (mode.includes('train') || mode.includes('rail') || net.includes('sncf')) type = 'train';
                                 }
-                                sections.push({ 
-                                     type, 
-                                     color, 
-                                     code, 
-                                     shape: sectionShape,
-                                     duration: Math.round((s.duration || 0) / 60)
-                                 });
+                                sections.push({
+                                    type,
+                                    color,
+                                    code,
+                                    shape: sectionShape,
+                                    duration: Math.round((s.duration || 0) / 60)
+                                });
                             }
                         });
                     }
@@ -515,15 +515,15 @@ window.updateWalkingPath = async function(props) {
                     }
                 }
             }
-            
+
             if (sections.length > 0) {
                 const pathId = `path-${idx}`;
                 const pathPolylines = [];
                 const pathMarkers = [];
 
                 const shouldBeVisible = (window.activeAccordion === 'commute' && target.type === 'workplace') ||
-                                       (window.activeAccordion === 'vieQuartier' && target.type === 'center') ||
-                                       ((window.activeAccordion === 'mobility' || window.activeAccordion === 'infra') && target.type === 'station');
+                    (window.activeAccordion === 'vieQuartier' && target.type === 'center') ||
+                    ((window.activeAccordion === 'mobility' || window.activeAccordion === 'infra') && target.type === 'station');
 
                 sections.forEach((sec, sIdx) => {
                     const isTransit = ['rer', 'metro', 'bus', 'train', 'tram'].includes(sec.type);
@@ -555,13 +555,13 @@ window.updateWalkingPath = async function(props) {
 
                 // Add walking icon at start if walking
                 if (sections[0].type === 'walking' || sections[0].type === 'street_network') {
-                     const startPoint = sections[0].shape[0];
-                     const walkMarker = L.marker(startPoint, {
-                         icon: L.divIcon({ className: '', html: `<div class="walk-icon" style="font-size: 14px; opacity: ${shouldBeVisible ? 0.8 : 0}; transform: translate(-50%, -50%);">🚶</div>`, iconSize: [0, 0] }),
-                         interactive: false,
-                         pane: 'walkingPathsPane'
-                     }).addTo(window.walkingPathsGroup);
-                     pathMarkers.push(walkMarker);
+                    const startPoint = sections[0].shape[0];
+                    const walkMarker = L.marker(startPoint, {
+                        icon: L.divIcon({ className: '', html: `<div class="walk-icon" style="font-size: 14px; opacity: ${shouldBeVisible ? 0.8 : 0}; transform: translate(-50%, -50%);">🚶</div>`, iconSize: [0, 0] }),
+                        interactive: false,
+                        pane: 'walkingPathsPane'
+                    }).addTo(window.walkingPathsGroup);
+                    pathMarkers.push(walkMarker);
                 }
 
                 const lastSection = sections[sections.length - 1];
@@ -574,7 +574,7 @@ window.updateWalkingPath = async function(props) {
                 });
 
                 // Add Label at Destination
-                
+
                 // Avoid simple overlap by checking previous labels
                 let yOffset = -5;
                 let xOffset = 0;
@@ -599,9 +599,9 @@ window.updateWalkingPath = async function(props) {
                     iconSize: [0, 0],
                     iconAnchor: [0, 0]
                 });
-                
-                const marker = L.marker(destPoint, { 
-                    icon: labelIcon, 
+
+                const marker = L.marker(destPoint, {
+                    icon: labelIcon,
                     interactive: false,
                     pane: 'walkingPathsPane'
                 }).addTo(window.walkingPathsGroup);
@@ -625,14 +625,14 @@ window.updateWalkingPath = async function(props) {
 
                 // If it's the primary center, update the info panel
                 if (target.type === 'center' && !window.lastWalkingDuration) {
-                     window.lastWalkingDuration = duration;
-                     window.lastWalkingTarget = target.name;
+                    window.lastWalkingDuration = duration;
+                    window.lastWalkingTarget = target.name;
                 }
 
             }
         } catch (e) { console.error("Path error:", e); }
     }
-    
+
     // Update the sidebar ONCE after all paths are loaded/processed
     if (selectedLayer && (selectedLayer.feature.id || selectedLayer.feature.properties.code) === props.code) {
         info.update(props, true);
@@ -647,12 +647,12 @@ window.updateWalkingPath = async function(props) {
     }
 };
 
-window.highlightPath = function(pathId, highlight, pathObj = null) {
+window.highlightPath = function (pathId, highlight, pathObj = null) {
     if (!pathObj) {
         pathObj = window.activeWalkingPaths?.find(p => p.id === pathId);
     }
     if (!pathObj) return;
-    
+
     if (highlight) {
         if (pathObj.polylines) {
             pathObj.polylines.forEach(p => p.setStyle({ opacity: 1 }));
@@ -706,11 +706,11 @@ window.highlightPath = function(pathId, highlight, pathObj = null) {
     }
 };
 
-window.updateWalkingLabelsZoom = function() {
+window.updateWalkingLabelsZoom = function () {
     if (!window.walkingPathsGroup) return;
     const zoom = window.map.getZoom();
     const isHighZoom = zoom >= 14;
-    
+
     document.querySelectorAll('.path-label > div').forEach(el => {
         el.style.opacity = isHighZoom ? '1' : '0';
     });
@@ -725,7 +725,7 @@ window.activeScoreFilters = {
     'bad': true
 };
 
-window.toggleScoreFilter = function(filter) {
+window.toggleScoreFilter = function (filter) {
     window.activeScoreFilters[filter] = !window.activeScoreFilters[filter];
     const el = document.getElementById(`filter-${filter}`);
     if (el) el.style.opacity = window.activeScoreFilters[filter] ? '1' : '0.2';
@@ -775,7 +775,7 @@ document.addEventListener('DOMContentLoaded', () => {
         item.addEventListener('click', () => {
             navItems.forEach(i => i.classList.remove('active'));
             item.classList.add('active');
-            
+
             const targetSection = document.querySelector(sections[index]);
             if (targetSection && scrollContainer) {
                 scrollContainer.scrollTo({
@@ -793,11 +793,11 @@ document.addEventListener('DOMContentLoaded', () => {
     window.updateContextualMap(window.activeAccordion);
 });
 
-window.initAxisExplorer = function() {
+window.initAxisExplorer = function () {
     const hubSelector = document.getElementById('axis-hub-selector');
     const axisList = document.getElementById('axis-selector-list');
     const resetBtn = document.getElementById('reset-axis-btn');
-    
+
     if (!hubSelector || !axisList) return;
 
     function renderAxes(hubId) {
@@ -829,7 +829,7 @@ window.initAxisExplorer = function() {
     });
 };
 
-window.precomputeAxisMembership = function() {
+window.precomputeAxisMembership = function () {
     if (!window.activeAxisId) {
         window.axisMembership = null;
         return;
@@ -853,7 +853,7 @@ window.precomputeAxisMembership = function() {
     window.axisMembership = membership;
 };
 
-window.selectTransitAxis = function(axisId) {
+window.selectTransitAxis = function (axisId) {
     // UI logic: highlight card
     document.querySelectorAll('.axis-card').forEach(c => c.classList.remove('active', 'border-blue-500', 'ring-2', 'ring-blue-100'));
     const card = document.getElementById(`axis-card-${axisId}`);
@@ -861,22 +861,22 @@ window.selectTransitAxis = function(axisId) {
 
     window.activeAxisId = axisId;
     window.precomputeAxisMembership(); // Critical: Pre-calculate to avoid UI freeze
-    
+
     document.getElementById('reset-axis-btn')?.classList.remove('hidden');
-    
+
     window.updateFilters();
 
     // Visual feedback: Zoom to axis extent
     window.zoomToActiveAxis();
 };
 
-window.zoomToActiveAxis = function() {
+window.zoomToActiveAxis = function () {
     if (!window.activeAxisId) return;
     const hubId = document.getElementById('axis-hub-selector')?.value || 'bastille';
     const axis = window.TRANSIT_AXES_CONFIG[hubId]?.find(a => a.id === window.activeAxisId);
     if (!axis || !window.allStationsData) return;
 
-    const axisStations = window.allStationsData.features.filter(s => 
+    const axisStations = window.allStationsData.features.filter(s =>
         axis.stations.includes(s.properties.nom_gares) && s.properties.indice_lig === axis.line
     );
 
@@ -886,10 +886,10 @@ window.zoomToActiveAxis = function() {
     }
 };
 
-window.openPreferencesModal = function() {
+window.openPreferencesModal = function () {
     const backdrop = document.getElementById('preferences-backdrop');
     const panel = document.getElementById('ui-panel');
-    
+
     if (backdrop && panel) {
         panel.classList.add('modal-mode');
         // Small delay to ensure display: block is set before opacity transition
@@ -900,19 +900,19 @@ window.openPreferencesModal = function() {
     }
 };
 
-window.closePreferencesModal = function() {
+window.closePreferencesModal = function () {
     const backdrop = document.getElementById('preferences-backdrop');
     const panel = document.getElementById('ui-panel');
-    
+
     if (backdrop && panel) {
         backdrop.classList.remove('visible');
         panel.classList.remove('visible');
-        
+
         // After animation, move panel back to sidebar mode
         setTimeout(() => {
             panel.classList.remove('modal-mode');
             window.updateFilters();
-            
+
             if (window.isFirstSearch) {
                 window.isFirstSearch = false;
             }
@@ -953,11 +953,11 @@ window.selectSurfaceBucket = function (bucket, btn) {
 
 // --- WORKPLACE MANAGEMENT ---
 window.activeWorkplaces = [
-    { 
-        id: 'bastille', 
-        limit: 45, 
-        walkLimit: 15, 
-        modes: ['metro', 'rer', 'train'] 
+    {
+        id: 'bastille',
+        limit: 45,
+        walkLimit: 15,
+        modes: ['metro', 'rer', 'train']
     }
 ];
 
@@ -993,11 +993,11 @@ window.addWorkplace = function () {
         return;
     }
 
-    window.activeWorkplaces.push({ 
-        id: hubId, 
-        limit: 45, 
-        walkLimit: 20, 
-        modes: ['metro', 'rer', 'train', 'bus', 'tram'] 
+    window.activeWorkplaces.push({
+        id: hubId,
+        limit: 45,
+        walkLimit: 20,
+        modes: ['metro', 'rer', 'train', 'bus', 'tram']
     });
     selector.value = "";
     window.renderWorkplaces();
@@ -1088,7 +1088,8 @@ window.renderWorkplaces = function () {
                 ${modesHtml}
             </div>
         </div>
-    `;}).join('');
+    `;
+    }).join('');
 };
 
 // --- MAP INIT ---
@@ -1124,7 +1125,7 @@ map.getPane('topPane').style.zIndex = 650;
 
 map.on('click', () => {
     document.querySelectorAll('.city-center-marker-container.active').forEach(c => c.classList.remove('active'));
-}); 
+});
 map.getPane('topPane').style.pointerEvents = 'none';
 map.createPane('walkingPathsPane');
 map.getPane('walkingPathsPane').style.zIndex = 800;
@@ -1189,7 +1190,7 @@ const infoDiv = document.getElementById('info-card');
 if (infoDiv) {
     L.DomEvent.disableClickPropagation(infoDiv);
     L.DomEvent.disableScrollPropagation(infoDiv);
-    
+
     // Extra safety: manual stop
     infoDiv.addEventListener('click', e => e.stopPropagation());
     infoDiv.addEventListener('mousedown', e => e.stopPropagation());
@@ -1197,11 +1198,11 @@ if (infoDiv) {
 
 info.update = function (props, isSticky = false) {
     if (!infoDiv) return;
-    
+
     try {
         // If a selection is active, we only accept 'sticky' updates (like accordion clicks)
         if (selectedLayer && !isSticky) return;
-        
+
         if (!props || !props.nom) {
             if (selectedLayer) return;
             infoDiv.classList.remove('visible');
@@ -1209,19 +1210,19 @@ info.update = function (props, isSticky = false) {
             return;
         }
 
-    infoDiv.classList.add('visible');
-    
-    if (isSticky) {
-        infoDiv.classList.add('sticky-box');
-    } else {
-        infoDiv.classList.remove('sticky-box');
-    }
+        infoDiv.classList.add('visible');
 
-    const matchData = calculateMatchRate(props);
-    const matchRate = matchData?.total || 0;
-    const matchColor = matchRate > 85 ? 'text-emerald-600' : (matchRate > 70 ? 'text-green-500' : (matchRate > 50 ? 'text-lime-500' : (matchRate > 30 ? 'text-yellow-500' : (matchRate > 15 ? 'text-orange-500' : 'text-red-500'))));
-    
-    let html = `
+        if (isSticky) {
+            infoDiv.classList.add('sticky-box');
+        } else {
+            infoDiv.classList.remove('sticky-box');
+        }
+
+        const matchData = calculateMatchRate(props);
+        const matchRate = matchData?.total || 0;
+        const matchColor = matchRate > 85 ? 'text-emerald-600' : (matchRate > 70 ? 'text-green-500' : (matchRate > 50 ? 'text-lime-500' : (matchRate > 30 ? 'text-yellow-500' : (matchRate > 15 ? 'text-orange-500' : 'text-red-500'))));
+
+        let html = `
         <div class="flex flex-col h-full bg-white overflow-hidden rounded-t-2xl">
             ${isSticky ? `
             <div class="flex-shrink-0 flex items-center justify-between bg-slate-900 text-white px-5 py-3 gap-4">
@@ -1265,62 +1266,62 @@ info.update = function (props, isSticky = false) {
                 <div class="flex-1 overflow-y-auto">
                     <div class="flex flex-col pb-6">
                         ${(() => {
-                            const sectionMapping = [
-                                {
-                                    title: "Périmètre de recherche",
-                                    icon: "🎯",
-                                    ids: ["immo", "commute"]
-                                },
-                                {
-                                    title: "Comprendre le quartier",
-                                    icon: "🧭",
-                                    ids: ["mobility", "urbanisme", "vieQuartier", "socio", "demo"]
-                                },
-                                {
-                                    title: `À propos de ${props.commune || 'la ville'}`,
-                                    icon: "🏛️",
-                                    ids: ["finances", "safety", "infra", "education"]
-                                }
-                            ];
+                const sectionMapping = [
+                    {
+                        title: "Périmètre de recherche",
+                        icon: "🎯",
+                        ids: ["immo", "commute"]
+                    },
+                    {
+                        title: "Comprendre le quartier",
+                        icon: "🧭",
+                        ids: ["mobility", "urbanisme", "vieQuartier", "socio", "demo"]
+                    },
+                    {
+                        title: `À propos de ${props.commune || 'la ville'}`,
+                        icon: "🏛️",
+                        ids: ["finances", "safety", "infra", "education"]
+                    }
+                ];
 
-                            return sectionMapping.map(section => `
+                return sectionMapping.map(section => `
                                 <div class="flex-shrink-0 px-5 py-2 bg-slate-50/80 border-b border-gray-100 mt-2 first:mt-0">
                                     <div class="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                         <span>${section.icon}</span> ${section.title}
                                     </div>
                                 </div>
                                 ${section.ids.map(id => {
-                                    const cat = matchData.categories[id];
-                                    if (!cat || !cat.label || cat.isHidden) return '';
-                                    const isOpen = window.activeAccordion === id;
-                                    const prefDropdown = document.getElementById('pref-' + id);
-                                    const hasPref = !!prefDropdown;
-                                    const prefValue = prefDropdown?.value;
+                    const cat = matchData.categories[id];
+                    if (!cat || !cat.label || cat.isHidden) return '';
+                    const isOpen = window.activeAccordion === id;
+                    const prefDropdown = document.getElementById('pref-' + id);
+                    const hasPref = !!prefDropdown;
+                    const prefValue = prefDropdown?.value;
 
-                                    let prefColor = "text-slate-400";
-                                    if (hasPref && prefValue) {
-                                        const prefIdx = cat.scale.indexOf(prefValue);
-                                        const diff = Math.abs(cat.scaleIndex - prefIdx);
-                                        prefColor = diff === 0 ? "text-emerald-500" : (diff === 1 ? "text-yellow-500" : "text-red-500");
-                                    } else if (id === 'immo') {
-                                        prefColor = cat.score > 70 ? "text-emerald-500" : (cat.score > 40 ? "text-yellow-500" : "text-red-500");
-                                    } else if (id === 'mobility') {
-                                        const mobilityColors = {
-                                            "Loin des gares": "text-red-500", "Connecté": "text-orange-400",
-                                            "Sur le métro": "text-green-500", "Hub hyper-centre": "text-emerald-600"
-                                        };
-                                        prefColor = mobilityColors[cat.appreciation] || "text-slate-400";
-                                    } else if (id === 'commute') {
-                                        const commuteColors = {
-                                            "Pénible": "text-red-500", "Moyen": "text-orange-400",
-                                            "Confortable": "text-green-500", "Idéal": "text-emerald-600"
-                                        };
-                                        prefColor = commuteColors[cat.appreciation] || "text-slate-400";
-                                    } else {
-                                        prefColor = cat.score > 80 ? "text-emerald-400" : (cat.score > 50 ? "text-yellow-400" : "text-slate-300");
-                                    }
+                    let prefColor = "text-slate-400";
+                    if (hasPref && prefValue) {
+                        const prefIdx = cat.scale.indexOf(prefValue);
+                        const diff = Math.abs(cat.scaleIndex - prefIdx);
+                        prefColor = diff === 0 ? "text-emerald-500" : (diff === 1 ? "text-yellow-500" : "text-red-500");
+                    } else if (id === 'immo') {
+                        prefColor = cat.score > 70 ? "text-emerald-500" : (cat.score > 40 ? "text-yellow-500" : "text-red-500");
+                    } else if (id === 'mobility') {
+                        const mobilityColors = {
+                            "Loin des gares": "text-red-500", "Connecté": "text-orange-400",
+                            "Sur le métro": "text-green-500", "Hub hyper-centre": "text-emerald-600"
+                        };
+                        prefColor = mobilityColors[cat.appreciation] || "text-slate-400";
+                    } else if (id === 'commute') {
+                        const commuteColors = {
+                            "Pénible": "text-red-500", "Moyen": "text-orange-400",
+                            "Confortable": "text-green-500", "Idéal": "text-emerald-600"
+                        };
+                        prefColor = commuteColors[cat.appreciation] || "text-slate-400";
+                    } else {
+                        prefColor = cat.score > 80 ? "text-emerald-400" : (cat.score > 50 ? "text-yellow-400" : "text-slate-300");
+                    }
 
-                                    return `
+                    return `
                                     <div class="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors sources-container relative">
                                         <button onclick="window.toggleAccordion('${id}')" class="w-full flex items-center justify-between px-5 py-2.5 text-left">
                                             <div class="flex items-center gap-3">
@@ -1335,10 +1336,10 @@ info.update = function (props, isSticky = false) {
                                                     ${cat.isCustomScale ? `
                                                         <span class="text-[8px] font-black ${prefColor} tracking-tighter">${cat.score}% match</span>
                                                     ` : cat.scale.map((stepName, idx) => {
-                                                        const isActive = idx === cat.scaleIndex;
-                                                        const dotColor = isActive ? prefColor.replace('text-', 'bg-') : 'bg-gray-200';
-                                                        return `<div class="w-1 h-1 rounded-full ${dotColor}"></div>`;
-                                                    }).join('')}
+                        const isActive = idx === cat.scaleIndex;
+                        const dotColor = isActive ? prefColor.replace('text-', 'bg-') : 'bg-gray-200';
+                        return `<div class="w-1 h-1 rounded-full ${dotColor}"></div>`;
+                    }).join('')}
                                                 </div>
                                                 <svg class="w-3 h-3 text-gray-300 transform transition-transform ${isOpen ? 'rotate-180 text-blue-500' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                             </div>
@@ -1370,16 +1371,16 @@ info.update = function (props, isSticky = false) {
 
                                         ${isOpen ? `<div class="px-5 pb-4 text-[10px] text-gray-600 animate-in fade-in slide-in-from-top-2 duration-200">${renderCategoryDetails(id, props, cat, matchData)}</div>` : ''}
                                     </div>`;
-                                }).join('')}
+                }).join('')}
                             `).join('');
-                        })()}
+            })()}
                     </div>
                 </div>
 
             </div>
         </div>
 `;
-    infoDiv.innerHTML = html;
+        infoDiv.innerHTML = html;
     } catch (err) {
         console.error("Error updating info box:", err);
         infoDiv.innerHTML = `
@@ -1394,9 +1395,9 @@ info.update = function (props, isSticky = false) {
 
 window.activeAccordion = 'urbanisme'; // Default open to Urbanisme
 
-window.highlightAllWalkingPaths = function(visible, filterType = null) {
+window.highlightAllWalkingPaths = function (visible, filterType = null) {
     if (!window.activeWalkingPaths) return;
-    
+
     // Determine the relevant type for the current accordion if none provided
     let effectiveFilterType = filterType;
     if (!effectiveFilterType && visible) {
@@ -1414,9 +1415,9 @@ window.highlightAllWalkingPaths = function(visible, filterType = null) {
     });
 };
 
-window.highlightPathByName = function(name) {
+window.highlightPathByName = function (name) {
     if (!window.activeWalkingPaths) return;
-    
+
     if (!name) {
         // Use the new smart filtering
         window.highlightAllWalkingPaths(true);
@@ -1433,7 +1434,7 @@ window.highlightPathByName = function(name) {
         // Only match if the path is of the correct type for the current view
         const isCorrectType = !effectiveType || path.type === effectiveType;
         const isMatch = isCorrectType && path.name && path.name.toLowerCase().includes(name.toLowerCase());
-        
+
         if (isMatch) {
             window.highlightPath(path.id, true);
             if (path.polylines) {
@@ -1446,40 +1447,40 @@ window.highlightPathByName = function(name) {
     });
 };
 
-window.updateContextualMap = function(categoryId) {
+window.updateContextualMap = function (categoryId) {
     // 1. Define category to layer mappings
     const mappings = {
-        'immo': { 
+        'immo': {
             checks: { 'show-transactions': true },
-            pills: ['pill-group-immo', 'pill-group-maps'] 
+            pills: ['pill-group-immo', 'pill-group-maps']
         },
-        'mobility': { 
+        'mobility': {
             checks: { 'group-mobilite': true },
-            pills: ['pill-group-mobility'] 
+            pills: ['pill-group-mobility']
         },
-        'commute': { 
+        'commute': {
             checks: {}, // Special handling for walk paths
-            pills: ['pill-group-mobility'] 
+            pills: ['pill-group-mobility']
         },
-        'urbanisme': { 
+        'urbanisme': {
             checks: { 'show-espaces-verts': true, 'show-osm-context': true },
-            pills: ['pill-group-maps'] 
+            pills: ['pill-group-maps']
         },
-        'vieQuartier': { 
+        'vieQuartier': {
             checks: { 'group-commerces': true, 'group-sorties': true, 'group-sante': true, 'show-centre-ville': true },
-            pills: ['pill-group-commerces', 'pill-group-sorties', 'pill-group-sante', 'pill-group-maps'] 
+            pills: ['pill-group-commerces', 'pill-group-sorties', 'pill-group-sante', 'pill-group-maps']
         },
-        'infra': { 
+        'infra': {
             checks: { 'group-infra': true },
-            pills: ['pill-group-infra'] 
+            pills: ['pill-group-infra']
         },
-        'education': { 
+        'education': {
             checks: { 'show-schools': true },
-            pills: ['pill-group-infra'] 
+            pills: ['pill-group-infra']
         },
-        'safety': { 
+        'safety': {
             checks: { 'show-qpv': true, 'show-zsp': true },
-            pills: ['pill-group-maps'] 
+            pills: ['pill-group-maps']
         }
     };
 
@@ -1537,7 +1538,7 @@ window.updateContextualMap = function(categoryId) {
         if (window.updateNoiseVisibility) window.updateNoiseVisibility();
         if (window.updatePathsVisibility) window.updatePathsVisibility();
         if (window.updatePediatresVisibility) window.updatePediatresVisibility();
-        
+
         // 4. Special: Walking Paths filtering
         if (categoryId === 'commute') {
             window.highlightAllWalkingPaths(true, 'workplace');
@@ -1556,31 +1557,31 @@ window.updateContextualMap = function(categoryId) {
         });
         window.highlightAllWalkingPaths(false);
     }
-    
+
     // Refresh IRIS style (for the zoom check)
     if (window.geojsonLayer) {
         window.geojsonLayer.setStyle(style);
     }
 };
 
-window.toggleAccordion = function(id) {
+window.toggleAccordion = function (id) {
     // Preserve scroll position
     const body = document.querySelector('.info-body');
     const scrollPos = body ? body.scrollTop : 0;
-    
+
     if (window.activeAccordion === id) {
         window.activeAccordion = null;
     } else {
         window.activeAccordion = id;
     }
-    
+
     // Contextual update for map and pills
     window.updateContextualMap(window.activeAccordion);
-    
+
     // Re-render the info box with the current feature
     if (selectedLayer) {
         info.update(selectedLayer.feature.properties, true);
-        
+
         // Restore scroll position after a short delay to allow DOM update
         setTimeout(() => {
             const newBody = document.querySelector('.info-body');
@@ -1593,7 +1594,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
     const budget = parseInt(document.getElementById('budget-input')?.value || 850000);
     const segment = props[window.currentPropertyType || 'all'] || props.all || { price: 5000, vol: 0 };
 
-    switch(id) {
+    switch (id) {
         case 'immo':
             const evolutionH = props.evolution || [];
             const vol = segment?.vol || 0;
@@ -1672,36 +1673,36 @@ function renderCategoryDetails(id, props, cat, matchData) {
                         </div>
                         <div class="space-y-2.5">
                             ${Object.entries(props.demo.surface_dist).map(([label, pct]) => {
-                                const bValues = { "<30m²": 20, "30-40m²": 35, "40-60m²": 50, "60-80m²": 70, "80-100m²": 90, "100-120m²": 110, "120m²+": 140 };
-                                const avgSize = bValues[label] || 50;
-                                const est = budget / (segment?.price || 1);
-                                const ratio = est / avgSize;
-                                let barGradient = 'linear-gradient(90deg, #fcd34d 0%, #f59e0b 100%)';
-                                let statusText = 'Trop petit';
-                                let statusColor = 'text-amber-500';
-                                if (ratio >= 0.95 && ratio <= 1.25) {
-                                    barGradient = 'linear-gradient(90deg, #4ade80 0%, #22c55e 100%)';
-                                    statusText = 'Match Budget';
-                                    statusColor = 'text-emerald-500';
-                                } else if (ratio < 0.95) {
-                                    barGradient = 'linear-gradient(90deg, #fca5a5 0%, #ef4444 100%)';
-                                    statusText = 'Hors Budget';
-                                    statusColor = 'text-rose-500';
-                                }
-                                
-                                return '<div>' +
-                                    '<div class="flex justify-between items-center text-[8px] mb-1 px-1">' +
-                                        '<div class="flex items-center gap-1.5">' +
-                                            '<span class="text-gray-600 font-bold">' + label + '</span>' +
-                                            '<span class="text-[7px] font-bold ' + statusColor + ' uppercase opacity-80">' + statusText + '</span>' +
-                                        '</div>' +
-                                        '<span class="font-bold text-gray-800">' + pct + '%</span>' +
-                                    '</div>' +
-                                    '<div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">' +
-                                        '<div class="h-full shadow-sm" style="width: ' + pct + '%; background: ' + barGradient + '"></div>' +
-                                    '</div>' +
-                                '</div>';
-                            }).join('')}
+                const bValues = { "<30m²": 20, "30-40m²": 35, "40-60m²": 50, "60-80m²": 70, "80-100m²": 90, "100-120m²": 110, "120m²+": 140 };
+                const avgSize = bValues[label] || 50;
+                const est = budget / (segment?.price || 1);
+                const ratio = est / avgSize;
+                let barGradient = 'linear-gradient(90deg, #fcd34d 0%, #f59e0b 100%)';
+                let statusText = 'Trop petit';
+                let statusColor = 'text-amber-500';
+                if (ratio >= 0.95 && ratio <= 1.25) {
+                    barGradient = 'linear-gradient(90deg, #4ade80 0%, #22c55e 100%)';
+                    statusText = 'Match Budget';
+                    statusColor = 'text-emerald-500';
+                } else if (ratio < 0.95) {
+                    barGradient = 'linear-gradient(90deg, #fca5a5 0%, #ef4444 100%)';
+                    statusText = 'Hors Budget';
+                    statusColor = 'text-rose-500';
+                }
+
+                return '<div>' +
+                    '<div class="flex justify-between items-center text-[8px] mb-1 px-1">' +
+                    '<div class="flex items-center gap-1.5">' +
+                    '<span class="text-gray-600 font-bold">' + label + '</span>' +
+                    '<span class="text-[7px] font-bold ' + statusColor + ' uppercase opacity-80">' + statusText + '</span>' +
+                    '</div>' +
+                    '<span class="font-bold text-gray-800">' + pct + '%</span>' +
+                    '</div>' +
+                    '<div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">' +
+                    '<div class="h-full shadow-sm" style="width: ' + pct + '%; background: ' + barGradient + '"></div>' +
+                    '</div>' +
+                    '</div>';
+            }).join('')}
                         </div>
                     </div>
                     ` : ''}
@@ -1715,8 +1716,8 @@ function renderCategoryDetails(id, props, cat, matchData) {
             activeHubs.forEach(wp => {
                 const cached = window.precomputedJourneysRaw?.[props.code]?.[wp.id];
                 if (cached) {
-                    const hubNames = { 
-                        'bastille': 'Bastille, Paris', 
+                    const hubNames = {
+                        'bastille': 'Bastille, Paris',
                         'saint-lazare': 'Saint-Lazare, Paris',
                         'montparnasse': 'Montparnasse, Paris',
                         'la-defense': 'La Défense, Puteaux',
@@ -1725,17 +1726,17 @@ function renderCategoryDetails(id, props, cat, matchData) {
                     };
                     const hubName = hubNames[wp.id] || wp.id;
                     const isOverLimit = cached.duration > wp.limit;
-                    
+
                     // Support both old 'itinerary' and new 'sections' format
                     let breakdown = [];
                     let firstMile = 0;
                     let lastMile = 0;
 
                     if (cached.sections) {
-                        breakdown = cached.sections.filter(s => s.code || ['rer','metro','bus','tram','train'].includes(s.type));
+                        breakdown = cached.sections.filter(s => s.code || ['rer', 'metro', 'bus', 'tram', 'train'].includes(s.type));
                         // In sections, walking are also sections. Sum durations.
                         firstMile = (cached.sections[0].type === 'walking' || cached.sections[0].type === 'street_network') ? cached.sections[0].duration : 0;
-                        lastMile = (cached.sections[cached.sections.length-1].type === 'walking' || cached.sections[cached.sections.length-1].type === 'street_network') ? cached.sections[cached.sections.length-1].duration : 0;
+                        lastMile = (cached.sections[cached.sections.length - 1].type === 'walking' || cached.sections[cached.sections.length - 1].type === 'street_network') ? cached.sections[cached.sections.length - 1].duration : 0;
                     } else if (cached.itinerary) {
                         breakdown = cached.itinerary;
                         firstMile = cached.firstMile || 0;
@@ -1763,11 +1764,11 @@ function renderCategoryDetails(id, props, cat, matchData) {
                             const isCircle = type === "metro" || type === "rer" || type === "train";
                             const color = step.color.startsWith('#') ? step.color : `#${step.color}`;
                             const textColor = step.textColor ? (step.textColor.startsWith('#') ? step.textColor : `#${step.textColor}`) : '#ffffff';
-                            
+
                             // Handle duration: if > 60, it's likely seconds, convert to minutes.
                             let stepDuration = step.duration || 0;
                             if (stepDuration > 60) stepDuration = Math.round(stepDuration / 60);
-                            
+
                             html += `
                                 <div class="flex items-center gap-1 group relative">
                                     <div class="flex items-center gap-0.5">
@@ -1795,7 +1796,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
         case 'mobility': {
             let html = `<div class="px-4 pb-4 space-y-3 mt-1">`;
             const centroid = window.irisCentroids?.[props.code] || { lat: props.lat, lon: props.lon };
-            
+
             // Nearby Stations (Metro, RER, Train)
             const nearby = (window.allStationsData || [])
                 .map(s => ({ ...s, dist: getDistance(centroid.lat, centroid.lon, s.lat, s.lon) }))
@@ -1807,7 +1808,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
                 <div class="space-y-1.5">
                     <div class="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-2">Stations à proximité</div>
                     ${nearby.map(s => {
-                        return `
+                    return `
                         <div class="bg-white p-2 rounded-xl border border-gray-100 flex items-center justify-between shadow-xs">
                             <div class="flex flex-col">
                                 <span class="text-[10px] font-black text-gray-800 leading-tight mb-1">${s.name}</span>
@@ -1818,10 +1819,10 @@ function renderCategoryDetails(id, props, cat, matchData) {
                             </div>
                             <span class="text-[9px] font-black ${s.dist < 400 ? 'text-emerald-600' : 'text-gray-400'}">${Math.round(s.dist)}m</span>
                         </div>`;
-                    }).join('')}
+                }).join('')}
                 </div>`;
             } else {
-                 html += `<div class="text-[9px] italic text-gray-400 text-center py-2 bg-gray-50 rounded-xl">Aucune station de métro/RER à moins de 800m</div>`;
+                html += `<div class="text-[9px] italic text-gray-400 text-center py-2 bg-gray-50 rounded-xl">Aucune station de métro/RER à moins de 800m</div>`;
             }
 
             // Grand Paris Express Section
@@ -1847,9 +1848,9 @@ function renderCategoryDetails(id, props, cat, matchData) {
                                         </div>
                                         <div class="flex items-center gap-1">
                                             ${s.lines.map(l => {
-                                                const c = idfmColors[l] || { bg: "#eee", text: "#000" };
-                                                return `<span class="px-1.5 py-0.5 rounded text-[7px] font-black" style="background-color: ${c.bg}; color: ${c.text};">L.${l}</span>`;
-                                            }).join('')}
+                        const c = idfmColors[l] || { bg: "#eee", text: "#000" };
+                        return `<span class="px-1.5 py-0.5 rounded text-[7px] font-black" style="background-color: ${c.bg}; color: ${c.text};">L.${l}</span>`;
+                    }).join('')}
                                         </div>
                                     </div>
                                     <div class="text-right">
@@ -2020,13 +2021,13 @@ function renderCategoryDetails(id, props, cat, matchData) {
                     <div class="pt-3 pb-1">
                         <div class="flex items-center gap-3 p-3 rounded-2xl bg-gray-50 border border-gray-100 shadow-sm">
                             <div class="w-10 h-10 rounded-full flex items-center justify-center text-xl shadow-inner bg-white" style="border: 2px solid ${segmentColor}">
-                                ${props.segment_id === 1 ? '🏘️' : 
-                                  props.segment_id === 2 ? '🏛️' : 
-                                  props.segment_id === 3 ? '🌊' : 
-                                  props.segment_id === 4 ? '⛰️' : 
-                                  props.segment_id === 5 ? '✨' : 
-                                  props.segment_id === 6 ? '🏠' : 
-                                  props.segment_id === 7 ? '🏡' : '📍'}
+                                ${props.segment_id === 1 ? '🏘️' :
+                    props.segment_id === 2 ? '🏛️' :
+                        props.segment_id === 3 ? '🌊' :
+                            props.segment_id === 4 ? '⛰️' :
+                                props.segment_id === 5 ? '✨' :
+                                    props.segment_id === 6 ? '🏠' :
+                                        props.segment_id === 7 ? '🏡' : '📍'}
                             </div>
                             <div class="flex flex-col">
                                 <span class="text-[8px] font-black text-gray-400 uppercase tracking-widest">Type de quartier</span>
@@ -2163,7 +2164,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
                 </div>
             `;
         }
-        
+
         case 'socio': {
             const d = cat.details;
             return `
@@ -2201,7 +2202,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
         case 'demo': {
             const demo = cat.details;
             const ages = demo.ages || { "0-14": 20, "15-24": 12, "25-54": 40, "55-79": 20, "80+": 8 };
-            
+
             return `
                 <div class="px-4 pb-4 space-y-4">
                     <div class="grid grid-cols-2 gap-2 mt-2">
@@ -2363,12 +2364,12 @@ function renderCategoryDetails(id, props, cat, matchData) {
             const idfAvg = sm.idf_avg || { burglaries_rate: 2.74, assaults_rate: 5.57, thefts_rate: 29.79 };
             const deptAvg = sm.dept_avg || idfAvg;
             const deptCode = props.code ? props.code.substring(0, 2) : (props.insee ? props.insee.substring(0, 2) : '75');
-            
+
             // Comparison based on total delinquency rate (burglaries + assaults + thefts)
             const currentTotal = (sm.burglaries_rate + sm.assaults_rate + sm.thefts_rate);
             const idfTotal = (idfAvg.burglaries_rate + idfAvg.assaults_rate + idfAvg.thefts_rate);
             const deptTotal = (deptAvg.burglaries_rate + deptAvg.assaults_rate + deptAvg.thefts_rate);
-            
+
             const safetyComparisons = [
                 { name: 'Paris (75)', rate: 65.0 },
                 { name: props.commune || 'Ce quartier', rate: currentTotal, isCurrent: true },
@@ -2377,7 +2378,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
                 { name: 'Vincennes', rate: 22.4 },
                 { name: 'St-Maur', rate: 19.8 }
             ].sort((a, b) => a.rate - b.rate);
-            
+
             const maxRate = Math.max(...safetyComparisons.map(c => c.rate), 100);
 
             return `
@@ -2456,9 +2457,9 @@ function renderCategoryDetails(id, props, cat, matchData) {
                         <div class="absolute left-[16px] top-4 bottom-4 w-px bg-slate-200/60"></div>
                         
                         ${types.map(t => {
-                            const info = d[t.id] || { count: 0, ips: null, is_in_commune: false };
-                            const hasEst = info.count > 0;
-                            return `
+                const info = d[t.id] || { count: 0, ips: null, is_in_commune: false };
+                const hasEst = info.count > 0;
+                return `
                             <div class="relative flex items-center justify-between pl-14 group">
                                 <!-- Dot/Icon centered on the line -->
                                 <div class="absolute left-0 w-8 h-8 rounded-full ${hasEst ? t.color : 'bg-slate-50 border border-dashed border-slate-200'} flex items-center justify-center text-sm text-white shadow-xs z-10 transition-all group-hover:scale-105">
@@ -2496,7 +2497,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
                                 </div>
                             </div>
                             `;
-                        }).join('')}
+            }).join('')}
                     </div>
                 </div>
             `;
@@ -2515,15 +2516,15 @@ function refreshMobilityCache(geojsonData) {
     if (!geojsonData || !window.precomputedJourneysRaw) return;
     const start = performance.now();
     window.mobilityCache = {};
-    
+
     geojsonData.features.forEach(f => {
         const insee = f.properties.code;
         const staticScores = f.properties.staticScores || {};
         const connectivityScore = staticScores.connectivity || 0;
-        
+
         let commuteScore = 100;
         let activeCount = 0;
-        
+
         if (window.activeWorkplaces?.length > 0) {
             let sumS = 0;
             window.activeWorkplaces.forEach(wp => {
@@ -2537,7 +2538,7 @@ function refreshMobilityCache(geojsonData) {
             });
             if (activeCount > 0) commuteScore = sumS / activeCount;
         }
-        
+
         window.mobilityCache[insee] = {
             mobility: Math.round(connectivityScore),
             commute: Math.round(commuteScore),
@@ -2549,10 +2550,10 @@ function refreshMobilityCache(geojsonData) {
 
 function getCommuneName(props, codeFallback = "") {
     if (!props) return 'Inconnue';
-    
+
     // Priority 1: Explicit commune property
     let name = props.commune || props.COMMUNE || props.nom_com || props.NOM_COM;
-    
+
     // Priority 2: Extract from iris name "Commune (Iris)" or "Commune - Iris"
     if (!name && (props.nom || props.NOM)) {
         const fullNom = props.nom || props.NOM;
@@ -2564,9 +2565,9 @@ function getCommuneName(props, codeFallback = "") {
             name = fullNom;
         }
     }
-    
+
     name = name || 'Inconnue';
-    
+
     // Special handling for Paris Arrondissements
     const code = String(props.code || props.CODE || props.INSEE_COM || codeFallback || "");
     if (name.includes('Paris') && code.startsWith('751')) {
@@ -2576,11 +2577,11 @@ function getCommuneName(props, codeFallback = "") {
             return `Paris ${suffix}`;
         }
     }
-    
+
     return name.trim();
 }
 
-window.getLineId = function(str) {
+window.getLineId = function (str) {
     if (!str) return "";
     // Clean up strings like "METRO 14" or "RER C" or "TRAIN J"
     let cleaned = String(str)
@@ -2610,477 +2611,477 @@ function calculateMatchRate(props) {
 
     try {
         if (!props || !props.code) return { total: 0, categories: {}, details: { immo: {}, mobility: {}, env: {} } };
-    
-    const budgetRaw = document.getElementById('budget-input')?.value || "850000";
-    const budget = parseInt(String(budgetRaw).replace(/\s/g, '').replace(/[^0-9]/g, '')) || 850000;
-    
-    const surfaceBucket = document.getElementById('surface-input')?.value || "60-80m²";
-    const bucketValues = {
-        "<30m²": 20, "30-40m²": 35, "40-60m²": 50, "60-80m²": 70, "80-100m²": 90, "100-120m²": 110, "120m²+": 140
-    };
-    const minSurface = bucketValues[surfaceBucket] || 70;
-    
-    const insee = props.code;
-    const currentType = window.currentPropertyType || 'all';
 
-    // 1. MARCHÉ IMMOBILIER & BUDGET FIT
-    const segment = props[currentType] || props.all || { price: 5000, vol: 0, p25: 4250, p75: 5750 };
-    const median = segment.price || 5000;
-    const estimatedSurface = budget / median;
-    const surfaceRatio = estimatedSurface / minSurface;
+        const budgetRaw = document.getElementById('budget-input')?.value || "850000";
+        const budget = parseInt(String(budgetRaw).replace(/\s/g, '').replace(/[^0-9]/g, '')) || 850000;
 
-    // Budget Fit: We want a neighborhood that matches our lifestyle/budget.
-    // Perfect match if estimated surface is within requested range (-20% price to +5% price)
-    // -20% price => 1.25x surface ratio
-    // +5% price => 0.95x surface ratio
-    let fitScore = 0;
-    if (surfaceRatio >= 0.95 && surfaceRatio <= 1.25) {
-        fitScore = 100;
-    } else if (surfaceRatio < 0.95) {
-        // Too expensive: Drop fast. 0% if surface is 60% of what's requested
-        fitScore = Math.round(Math.max(0, 100 - (0.95 - surfaceRatio) * 250)); 
-    } else {
-        // Under-investing: Drop as we are "too rich" for the area.
-        fitScore = Math.round(Math.max(0, 100 - (surfaceRatio - 1.25) * 110));
-    }
+        const surfaceBucket = document.getElementById('surface-input')?.value || "60-80m²";
+        const bucketValues = {
+            "<30m²": 20, "30-40m²": 35, "40-60m²": 50, "60-80m²": 70, "80-100m²": 90, "100-120m²": 110, "120m²+": 140
+        };
+        const minSurface = bucketValues[surfaceBucket] || 70;
 
-    // Liquidity: Transactions volume (relative to local average)
-    // High volume = good liquidity
-    const liquidityScore = Math.min(100, (segment.vol || 0) * 15); 
+        const insee = props.code;
+        const currentType = window.currentPropertyType || 'all';
 
-    // 1b. LOCAL SURFACE AVAILABILITY
-    // Calculate % of housing park matching or exceeding the requested size bucket
-    const surfaceBuckets = ["<30m²", "30-40m²", "40-60m²", "60-80m²", "80-100m²", "100-120m²", "120m²+"];
-    
-    // Robust matching: normalize strings to avoid character/space mismatches
-    const normalize = (s) => String(s || '').replace(/\s/g, '').replace('²', '2').replace('–', '-').replace('+', '');
-    const normBucket = normalize(surfaceBucket);
-    const selectedIdx = surfaceBuckets.findIndex(b => normalize(b) === normBucket);
-    
-    let availabilityPct = 0;
-    if (props.demo?.surface_dist && selectedIdx !== -1) {
-        const dist = props.demo.surface_dist;
-        const distKeys = Object.keys(dist);
-        
-        surfaceBuckets.slice(selectedIdx).forEach(b => {
-            const normB = normalize(b);
-            const actualKey = distKeys.find(k => normalize(k) === normB);
-            const val = actualKey ? parseFloat(dist[actualKey]) : 0;
-            availabilityPct += isNaN(val) ? 0 : val;
-        });
-    } else if (!props.demo?.surface_dist) {
-        availabilityPct = 100; // Fallback if data missing
-    } else {
-        availabilityPct = 0; // Not found
-    }
-    const pav = props.pav || 0;
-    const finalAvailabilityPct = Math.round(availabilityPct * (currentType === 'house' ? pav : (currentType === 'apt' ? (1 - pav) : 1)));
-    const availabilityScore = Math.min(100, availabilityPct * 1.5); // Boost to make it a fair score
+        // 1. MARCHÉ IMMOBILIER & BUDGET FIT
+        const segment = props[currentType] || props.all || { price: 5000, vol: 0, p25: 4250, p75: 5750 };
+        const median = segment.price || 5000;
+        const estimatedSurface = budget / median;
+        const surfaceRatio = estimatedSurface / minSurface;
 
-    let immoScore = Math.round((fitScore * 0.5) + (liquidityScore * 0.2) + (availabilityScore * 0.3));
-
-    // Availability check (to keep exclusion logic)
-    const surfaceScore = (estimatedSurface >= minSurface * 0.5 && availabilityPct > 2) ? 1.0 : 0;
-    
-    let availability = 1.0;
-    if (currentType === 'house') {
-        if (pav < 0.03) {
-            availability = 0;
+        // Budget Fit: We want a neighborhood that matches our lifestyle/budget.
+        // Perfect match if estimated surface is within requested range (-20% price to +5% price)
+        // -20% price => 1.25x surface ratio
+        // +5% price => 0.95x surface ratio
+        let fitScore = 0;
+        if (surfaceRatio >= 0.95 && surfaceRatio <= 1.25) {
+            fitScore = 100;
+        } else if (surfaceRatio < 0.95) {
+            // Too expensive: Drop fast. 0% if surface is 60% of what's requested
+            fitScore = Math.round(Math.max(0, 100 - (0.95 - surfaceRatio) * 250));
         } else {
-            availability = pav < 0.12 ? 0.3 : (pav < 0.30 ? 0.6 : 1.0);
+            // Under-investing: Drop as we are "too rich" for the area.
+            fitScore = Math.round(Math.max(0, 100 - (surfaceRatio - 1.25) * 110));
         }
-        if (document.getElementById('garden-filter')?.checked) {
-            availability *= (props.gVol > 0 ? 1.0 : (pav > 0.4 ? 0.8 : 0.5));
-        }
-    } else if (currentType === 'apt') {
-        if ((1 - pav) < 0.05) {
-            availability = 0;
+
+        // Liquidity: Transactions volume (relative to local average)
+        // High volume = good liquidity
+        const liquidityScore = Math.min(100, (segment.vol || 0) * 15);
+
+        // 1b. LOCAL SURFACE AVAILABILITY
+        // Calculate % of housing park matching or exceeding the requested size bucket
+        const surfaceBuckets = ["<30m²", "30-40m²", "40-60m²", "60-80m²", "80-100m²", "100-120m²", "120m²+"];
+
+        // Robust matching: normalize strings to avoid character/space mismatches
+        const normalize = (s) => String(s || '').replace(/\s/g, '').replace('²', '2').replace('–', '-').replace('+', '');
+        const normBucket = normalize(surfaceBucket);
+        const selectedIdx = surfaceBuckets.findIndex(b => normalize(b) === normBucket);
+
+        let availabilityPct = 0;
+        if (props.demo?.surface_dist && selectedIdx !== -1) {
+            const dist = props.demo.surface_dist;
+            const distKeys = Object.keys(dist);
+
+            surfaceBuckets.slice(selectedIdx).forEach(b => {
+                const normB = normalize(b);
+                const actualKey = distKeys.find(k => normalize(k) === normB);
+                const val = actualKey ? parseFloat(dist[actualKey]) : 0;
+                availabilityPct += isNaN(val) ? 0 : val;
+            });
+        } else if (!props.demo?.surface_dist) {
+            availabilityPct = 100; // Fallback if data missing
         } else {
-            availability = (1 - pav) < 0.15 ? 0.5 : 1.0;
+            availabilityPct = 0; // Not found
         }
-    }
-    
-    if (availability === 0) immoScore = 0;
+        const pav = props.pav || 0;
+        const finalAvailabilityPct = Math.round(availabilityPct * (currentType === 'house' ? pav : (currentType === 'apt' ? (1 - pav) : 1)));
+        const availabilityScore = Math.min(100, availabilityPct * 1.5); // Boost to make it a fair score
 
-    let isExcluded = (immoScore === 0);
-    let exclusionReason = "";
-    if (isExcluded) {
-        if (availability === 0) exclusionReason = "Type Introuvable";
-        else if (fitScore === 0) exclusionReason = "Hors Budget / Décalé";
-        else if (surfaceScore === 0) exclusionReason = "Surface Insuffisante";
-    }
+        let immoScore = Math.round((fitScore * 0.5) + (liquidityScore * 0.2) + (availabilityScore * 0.3));
 
-    // 2. MOBILITÉ & TRAJET
-    const cachedMobility = window.mobilityCache?.[insee] || { mobility: 50, commute: 100, hasWorkplaces: false };
-    const mobilityScore = cachedMobility.mobility;
-    const commuteScore = cachedMobility.commute;
+        // Availability check (to keep exclusion logic)
+        const surfaceScore = (estimatedSurface >= minSurface * 0.5 && availabilityPct > 2) ? 1.0 : 0;
 
-    // 3. URBANISME (Ex-Environnement)
-    const staticScores = props.staticScores || {};
-    let urbanismeScore = staticScores.env || 0;
-    const coolness = staticScores.coolness || 50;
-
-    // Apply Airport Noise (PEB) Penalty
-    const pebZone = window.pebByIris?.[insee];
-    if (pebZone) {
-        const penalties = { za: 45, zb: 35, zc: 25, zd: 15 };
-        urbanismeScore = Math.max(0, urbanismeScore - (penalties[pebZone] || 0));
-    }
-
-    // 4. PREPARE AMENITY DATA
-    const counts = props.counts || {
-        boulangerie: 0, boucherie: 0, fromagerie: 0, pharmacie: 0, supermarket: 0, bio: 0, 
-        restaurants: 0, fast_food: 0, bars: 0, cafes: 0, pubs: 0,
-        theatres: 0, cinemas: 0, musees: 0, gym: 0, pool: 0, commerces: 0, pediatres: 0,
-        caviste: 0, marche: 0, picard: 0, poste: 0, church: 0, stations: 0,
-        poissonnerie: 0, fleuriste: 0, chocolatier: 0, epicerie_fine: 0
-    };
-
-    // 5. VIE DE QUARTIER (Merge of Services & Sorties)
-    const servicesScore = staticScores.services || 0;
-    const socialScore = staticScores.social || 0;
-    const vieQuartierScore = (servicesScore + socialScore) / 2;
-    
-    const pedCount = counts.pediatres || window.pediatresByIris?.[insee] || 0;
-    const socialCounts = counts;
-
-    // 6. ÉDUCATION
-    const familyScore = staticScores.family || 0;
-    const schoolsCount = counts.schools || 0;
-
-    let noise = props.noise || 0;
-    if (pebZone) {
-        const noisePenalties = { za: 50, zb: 40, zc: 30, zd: 20 };
-        noise += (noisePenalties[pebZone] || 0);
-    }
-
-    // 8. VIBE MATCHING (Hard Filter)
-    const selectedVibes = window.selectedVibes || [];
-    let matchedVibesCount = 0;
-    
-    if (selectedVibes.length > 0) {
-        selectedVibes.forEach(v => {
-            // New segmentation matching: just check if segment_name matches selected vibe
-            if (props.segment_name === v) {
-                matchedVibesCount++;
+        let availability = 1.0;
+        if (currentType === 'house') {
+            if (pav < 0.03) {
+                availability = 0;
+            } else {
+                availability = pav < 0.12 ? 0.3 : (pav < 0.30 ? 0.6 : 1.0);
             }
-        });
-
-        if (matchedVibesCount < selectedVibes.length) {
-            isExcluded = true;
-            exclusionReason = "Type de quartier";
+            if (document.getElementById('garden-filter')?.checked) {
+                availability *= (props.gVol > 0 ? 1.0 : (pav > 0.4 ? 0.8 : 0.5));
+            }
+        } else if (currentType === 'apt') {
+            if ((1 - pav) < 0.05) {
+                availability = 0;
+            } else {
+                availability = (1 - pav) < 0.15 ? 0.5 : 1.0;
+            }
         }
-    }
-    
-    const vibeRatio = 1.0; // Hard filter means match is 100% if not excluded
 
-    const categories = {
-        immo: { 
-            score: immoScore, 
-            label: "Marché immobilier", 
-            icon: "🏠", 
-            color: "text-emerald-600", 
-            isCustomScale: true,
-            details: {
-                fitScore,
-                surfaceRatio,
-                estimatedSurface,
-                minSurface,
-                availabilityScore,
-                availabilityPct,
-                finalAvailabilityPct
-            }
-        },
-        mobility: { score: mobilityScore, label: "Mobilité", icon: "⚡", color: "text-blue-600" },
-        commute: { 
-            score: commuteScore, 
-            label: "Temps de trajet", 
-            icon: "🕒", 
-            color: "text-indigo-600",
-            isHidden: !cachedMobility.hasWorkplaces
-        },
-        urbanisme: { score: urbanismeScore, label: "Urbanisme", icon: "🏢", color: "text-emerald-600" },
-        vieQuartier: { 
-            score: vieQuartierScore, 
-            label: "Vie de quartier", 
-            icon: "🏘️", 
-            color: "text-pink-600",
-            details: { ...counts, pediatres: pedCount, marche: (counts.marche || 0), ...socialCounts }
-        },
-        infra: {
-            score: staticScores.infra || 0,
-            label: "Infrastructures Municipales",
-            icon: "🏢",
-            color: "text-blue-700",
-            details: {
-                biblios: counts.biblios,
-                conservatoires: counts.conservatoires,
-                tennis: counts.tennis,
-                pool: counts.pool,
-                cinemas: counts.cinemas,
-                theatres: counts.theatres,
-                concerts: counts.concerts,
-                musees: counts.musees,
-                schoolsCount: props.schoolsCount || counts.schools || 0,
-                caf_coverage: props.caf_coverage
-            }
-        },
+        if (availability === 0) immoScore = 0;
 
-        safety: {
-            score: staticScores.safety || 0,
-            label: "Sécurité",
-            icon: "🛡️",
-            color: "text-orange-600",
-            details: props.safety_metrics || {}
-        },
-        socio: { 
-            score: 100, 
-            label: "Profil Social", 
-            icon: "🤝", 
-            color: "text-slate-600",
-            details: {
-                income: props.demo?.income,
-                social_pct: props.demo?.social_pct,
-                ips: Math.round(props.ips || 100),
-                diploma_pct: props.demo?.diploma_pct
-            }
-        },
-        demo: { 
-            score: 100, 
-            label: "Démographie", 
-            icon: "📊", 
-            color: "text-indigo-600",
-            details: {
-                family_pct: props.demo?.family_pct,
-                young_pct: props.demo?.young_pct,
-                senior_pct: props.demo?.ages?.["80+"] || props.demo?.senior_pct,
-                median_age: props.demo?.median_age,
-                ages: props.demo?.ages
-            }
-        },
-        education: {
-            score: Math.min(100, (props.ips || 100) * 0.8),
-            label: "Éducation",
-            icon: "🎓",
-            color: "text-blue-600",
-            details: props.school_details || {}
-        },
-        finances: (() => {
-            const fin = props.finances || {};
-            const taxRate = fin.taxe_fonciere || 0;
-            const epargnePct = fin.epargne_pct || 0;
-            const detteHab = fin.dette_hab || 0;
-            const desend = fin.capacite_desendettement || 0;
-            
-            // Composite score (0-100)
-            // Tax: lower = better (Paris 13% = 100, 60% = 0)
-            const taxScore = taxRate > 0 ? Math.max(0, 100 - ((taxRate - 10) / 55) * 100) : 50;
-            // Epargne: 20%+ = 100, 0% = 0
-            const epScore = Math.max(0, Math.min(100, epargnePct * 5));
-            // Debt: 500/hab = 100, 3000/hab = 0
-            const debtScore = detteHab > 0 ? Math.max(0, 100 - ((detteHab - 500) / 2500) * 100) : 50;
-            // Désendettement: 0 ans = 100, 15 ans = 0
-            const desScore = desend > 0 && desend < 99 ? Math.max(0, 100 - (desend / 15) * 100) : (desend === 0 ? 100 : 30);
-            
-            const finScore = taxRate > 0 ? Math.round(taxScore * 0.35 + epScore * 0.30 + debtScore * 0.20 + desScore * 0.15) : 50;
-            
-            const label = finScore >= 75 ? 'Saine' : finScore >= 50 ? 'Correcte' : finScore >= 30 ? 'Sous pression' : 'Fragile';
-            const color = finScore >= 75 ? 'text-emerald-600' : finScore >= 50 ? 'text-amber-500' : finScore >= 30 ? 'text-orange-500' : 'text-red-500';
-            
-            return {
-                score: finScore,
-                label: "Finances locales",
-                appreciation: label,
-                icon: "🏛️",
-                color,
-                details: fin
-            };
-        })()
-    };
+        let isExcluded = (immoScore === 0);
+        let exclusionReason = "";
+        if (isExcluded) {
+            if (availability === 0) exclusionReason = "Type Introuvable";
+            else if (fitScore === 0) exclusionReason = "Hors Budget / Décalé";
+            else if (surfaceScore === 0) exclusionReason = "Surface Insuffisante";
+        }
 
-    const categoryScales = {
-        immo: ["Inaccessible", "Serré / Rare", "Accessible", "Opportunité"],
-        mobility: ["Loin des gares", "Connecté", "Sur le métro", "Hub hyper-centre"],
-        commute: ["Pénible", "Moyen", "Confortable", "Idéal"],
-        urbanisme: ["Le Village Urbain", "Le Standing Patrimonial", "La Riviera (Bords de l'Eau)", "Le Coteau résidentiel", "Le Néo-Résidentiel", "Le Faubourg / Maison de Ville", "Le Pavillonnaire Familial"],
-        vieQuartier: ["Calme & Résid.", "Pratique & Paisible", "Commerçant & Animé", "Ultra-Animé & Festif"],
-        socio: ["Populaire", "Mixité sociale", "Aisé", "Très aisé"],
-        demo: ["Jeune & Dynamique", "Familles & Actifs", "Résidentiel Mature", "Calme & Séniors"],
-        safety: ["Vigilance", "Standard", "Serein", "Très sûr"],
-        infra: ["Essentiels", "Bien équipé", "Riche", "Pôle d'attractivité"],
-        education: ["Moyen", "Bon", "Excellence", "Élite"],
-        finances: ["Fragile", "Sous pression", "Correcte", "Saine"]
-    };
+        // 2. MOBILITÉ & TRAJET
+        const cachedMobility = window.mobilityCache?.[insee] || { mobility: 50, commute: 100, hasWorkplaces: false };
+        const mobilityScore = cachedMobility.mobility;
+        const commuteScore = cachedMobility.commute;
 
-    Object.entries(categories).forEach(([id, cat]) => {
-        cat.scale = categoryScales[id] || [];
-        cat.appreciation = "N/A";
-        
-        if (cat.isHidden) return;
-        const s = cat.score;
-        let app = "";
+        // 3. URBANISME (Ex-Environnement)
+        const staticScores = props.staticScores || {};
+        let urbanismeScore = staticScores.env || 0;
+        const coolness = staticScores.coolness || 50;
 
-        switch(id) {
-            case 'immo':
-                const sRatio = cat.details.surfaceRatio || 1;
-                if (isExcluded) app = "Exclu";
-                else if (immoScore >= 96) app = "Match Parfait";
-                else if (sRatio > 1.15) app = "Sous-investissement";
-                else if (sRatio < 0.85) app = "Budget Insuffisant";
-                else if (immoScore >= 80) app = "Bon Match";
-                else app = "Décalé";
-                break;
-            case 'mobility':
-                const stationsNear = counts.stations || 0;
-                const hasMetro = props.has_metro || false;
-                
-                if (hasMetro) {
-                    if (s >= 85) app = "Hub hyper-centre";
-                    else app = "Sur le métro";
-                } else if (stationsNear > 0) {
-                    if (s >= 85) app = "Hub hyper-centre";
-                    else app = "Connecté";
-                } else {
-                    app = "Loin des gares";
+        // Apply Airport Noise (PEB) Penalty
+        const pebZone = window.pebByIris?.[insee];
+        if (pebZone) {
+            const penalties = { za: 45, zb: 35, zc: 25, zd: 15 };
+            urbanismeScore = Math.max(0, urbanismeScore - (penalties[pebZone] || 0));
+        }
+
+        // 4. PREPARE AMENITY DATA
+        const counts = props.counts || {
+            boulangerie: 0, boucherie: 0, fromagerie: 0, pharmacie: 0, supermarket: 0, bio: 0,
+            restaurants: 0, fast_food: 0, bars: 0, cafes: 0, pubs: 0,
+            theatres: 0, cinemas: 0, musees: 0, gym: 0, pool: 0, commerces: 0, pediatres: 0,
+            caviste: 0, marche: 0, picard: 0, poste: 0, church: 0, stations: 0,
+            poissonnerie: 0, fleuriste: 0, chocolatier: 0, epicerie_fine: 0
+        };
+
+        // 5. VIE DE QUARTIER (Merge of Services & Sorties)
+        const servicesScore = staticScores.services || 0;
+        const socialScore = staticScores.social || 0;
+        const vieQuartierScore = (servicesScore + socialScore) / 2;
+
+        const pedCount = counts.pediatres || window.pediatresByIris?.[insee] || 0;
+        const socialCounts = counts;
+
+        // 6. ÉDUCATION
+        const familyScore = staticScores.family || 0;
+        const schoolsCount = counts.schools || 0;
+
+        let noise = props.noise || 0;
+        if (pebZone) {
+            const noisePenalties = { za: 50, zb: 40, zc: 30, zd: 20 };
+            noise += (noisePenalties[pebZone] || 0);
+        }
+
+        // 8. VIBE MATCHING (Hard Filter)
+        const selectedVibes = window.selectedVibes || [];
+        let matchedVibesCount = 0;
+
+        if (selectedVibes.length > 0) {
+            selectedVibes.forEach(v => {
+                // New segmentation matching: just check if segment_name matches selected vibe
+                if (props.segment_name === v) {
+                    matchedVibesCount++;
                 }
-                break;
-            case 'commute':
-                if (s < 40) app = "Pénible";
-                else if (s < 70) app = "Moyen";
-                else if (s < 90) app = "Confortable";
-                else app = "Idéal";
-                break;
-            case 'urbanisme':
-                app = props.segment_name || "Non segmenté";
-                break;
-            case 'vieQuartier':
-                if (s < 30) app = "Calme & Résid.";
-                else if (s < 60) app = "Pratique & Paisible";
-                else if (s < 85) app = "Commerçant & Animé";
-                else app = "Ultra-Animé & Festif";
-                break;
+            });
 
-            case 'socio':
-                const income = props.demo?.income || 25000;
-                const socialPct = props.demo?.social_pct || 0;
-                const ipsVal = props.ips || 100;
-                if (income < 22000 || socialPct > 35 || ipsVal < 95) app = "Populaire";
-                else if (income < 35000 || socialPct > 15 || ipsVal < 110) app = "Mixité sociale";
-                else if (income < 55000 || ipsVal < 125) app = "Aisé";
-                else app = "Très aisé";
-                cat.isInformative = true;
-                break;
-            case 'demo':
-                const young = props.demo?.young_pct || 0;
-                const families = props.demo?.family_pct || 0;
-                const seniors = props.demo?.senior_pct || 0;
-                if (young > 25) app = "Jeune & Dynamique";
-                else if (families > 35) app = "Familles & Actifs";
-                else if (seniors > 25) app = "Calme & Séniors";
-                else app = "Résidentiel Mature";
-                cat.isInformative = true;
-                break;
-            case 'safety':
-                if (s < 40) app = "Vigilance";
-                else if (s < 65) app = "Standard";
-                else if (s < 85) app = "Serein";
-                else app = "Très sûr";
-                break;
-            case 'infra':
-                if (s < 35) app = "Essentiels";
-                else if (s < 60) app = "Bien équipé";
-                else if (s < 85) app = "Riche";
-                else app = "Pôle d'attractivité";
-                break;
-            case 'education':
-                if (s < 40) app = "Moyen";
-                else if (s < 65) app = "Bon";
-                else if (s < 85) app = "Excellence";
-                else app = "Élite";
-                break;
-            case 'finances': {
+            if (matchedVibesCount < selectedVibes.length) {
+                isExcluded = true;
+                exclusionReason = "Type de quartier";
+            }
+        }
+
+        const vibeRatio = 1.0; // Hard filter means match is 100% if not excluded
+
+        const categories = {
+            immo: {
+                score: immoScore,
+                label: "Marché immobilier",
+                icon: "🏠",
+                color: "text-emerald-600",
+                isCustomScale: true,
+                details: {
+                    fitScore,
+                    surfaceRatio,
+                    estimatedSurface,
+                    minSurface,
+                    availabilityScore,
+                    availabilityPct,
+                    finalAvailabilityPct
+                }
+            },
+            mobility: { score: mobilityScore, label: "Mobilité", icon: "⚡", color: "text-blue-600" },
+            commute: {
+                score: commuteScore,
+                label: "Temps de trajet",
+                icon: "🕒",
+                color: "text-indigo-600",
+                isHidden: !cachedMobility.hasWorkplaces
+            },
+            urbanisme: { score: urbanismeScore, label: "Urbanisme", icon: "🏢", color: "text-emerald-600" },
+            vieQuartier: {
+                score: vieQuartierScore,
+                label: "Vie de quartier",
+                icon: "🏘️",
+                color: "text-pink-600",
+                details: { ...counts, pediatres: pedCount, marche: (counts.marche || 0), ...socialCounts }
+            },
+            infra: {
+                score: staticScores.infra || 0,
+                label: "Infrastructures Municipales",
+                icon: "🏢",
+                color: "text-blue-700",
+                details: {
+                    biblios: counts.biblios,
+                    conservatoires: counts.conservatoires,
+                    tennis: counts.tennis,
+                    pool: counts.pool,
+                    cinemas: counts.cinemas,
+                    theatres: counts.theatres,
+                    concerts: counts.concerts,
+                    musees: counts.musees,
+                    schoolsCount: props.schoolsCount || counts.schools || 0,
+                    caf_coverage: props.caf_coverage
+                }
+            },
+
+            safety: {
+                score: staticScores.safety || 0,
+                label: "Sécurité",
+                icon: "🛡️",
+                color: "text-orange-600",
+                details: props.safety_metrics || {}
+            },
+            socio: {
+                score: 100,
+                label: "Profil Social",
+                icon: "🤝",
+                color: "text-slate-600",
+                details: {
+                    income: props.demo?.income,
+                    social_pct: props.demo?.social_pct,
+                    ips: Math.round(props.ips || 100),
+                    diploma_pct: props.demo?.diploma_pct
+                }
+            },
+            demo: {
+                score: 100,
+                label: "Démographie",
+                icon: "📊",
+                color: "text-indigo-600",
+                details: {
+                    family_pct: props.demo?.family_pct,
+                    young_pct: props.demo?.young_pct,
+                    senior_pct: props.demo?.ages?.["80+"] || props.demo?.senior_pct,
+                    median_age: props.demo?.median_age,
+                    ages: props.demo?.ages
+                }
+            },
+            education: {
+                score: Math.min(100, (props.ips || 100) * 0.8),
+                label: "Éducation",
+                icon: "🎓",
+                color: "text-blue-600",
+                details: props.school_details || {}
+            },
+            finances: (() => {
                 const fin = props.finances || {};
                 const taxRate = fin.taxe_fonciere || 0;
-                if (taxRate === 0) { app = "N/D"; break; }
-                if (s >= 75) app = "Saine";
-                else if (s >= 50) app = "Correcte";
-                else if (s >= 30) app = "Sous pression";
-                else app = "Fragile";
-                cat.isInformative = true;
-                break;
+                const epargnePct = fin.epargne_pct || 0;
+                const detteHab = fin.dette_hab || 0;
+                const desend = fin.capacite_desendettement || 0;
+
+                // Composite score (0-100)
+                // Tax: lower = better (Paris 13% = 100, 60% = 0)
+                const taxScore = taxRate > 0 ? Math.max(0, 100 - ((taxRate - 10) / 55) * 100) : 50;
+                // Epargne: 20%+ = 100, 0% = 0
+                const epScore = Math.max(0, Math.min(100, epargnePct * 5));
+                // Debt: 500/hab = 100, 3000/hab = 0
+                const debtScore = detteHab > 0 ? Math.max(0, 100 - ((detteHab - 500) / 2500) * 100) : 50;
+                // Désendettement: 0 ans = 100, 15 ans = 0
+                const desScore = desend > 0 && desend < 99 ? Math.max(0, 100 - (desend / 15) * 100) : (desend === 0 ? 100 : 30);
+
+                const finScore = taxRate > 0 ? Math.round(taxScore * 0.35 + epScore * 0.30 + debtScore * 0.20 + desScore * 0.15) : 50;
+
+                const label = finScore >= 75 ? 'Saine' : finScore >= 50 ? 'Correcte' : finScore >= 30 ? 'Sous pression' : 'Fragile';
+                const color = finScore >= 75 ? 'text-emerald-600' : finScore >= 50 ? 'text-amber-500' : finScore >= 30 ? 'text-orange-500' : 'text-red-500';
+
+                return {
+                    score: finScore,
+                    label: "Finances locales",
+                    appreciation: label,
+                    icon: "🏛️",
+                    color,
+                    details: fin
+                };
+            })()
+        };
+
+        const categoryScales = {
+            immo: ["Inaccessible", "Serré / Rare", "Accessible", "Opportunité"],
+            mobility: ["Loin des gares", "Connecté", "Sur le métro", "Hub hyper-centre"],
+            commute: ["Pénible", "Moyen", "Confortable", "Idéal"],
+            urbanisme: ["Le Village Urbain", "Le Standing Patrimonial", "La Riviera (Bords de l'Eau)", "Le Coteau résidentiel", "Le Néo-Résidentiel", "Le Faubourg / Maison de Ville", "Le Pavillonnaire Familial"],
+            vieQuartier: ["Calme & Résid.", "Pratique & Paisible", "Commerçant & Animé", "Ultra-Animé & Festif"],
+            socio: ["Populaire", "Mixité sociale", "Aisé", "Très aisé"],
+            demo: ["Jeune & Dynamique", "Familles & Actifs", "Résidentiel Mature", "Calme & Séniors"],
+            safety: ["Vigilance", "Standard", "Serein", "Très sûr"],
+            infra: ["Essentiels", "Bien équipé", "Riche", "Pôle d'attractivité"],
+            education: ["Moyen", "Bon", "Excellence", "Élite"],
+            finances: ["Fragile", "Sous pression", "Correcte", "Saine"]
+        };
+
+        Object.entries(categories).forEach(([id, cat]) => {
+            cat.scale = categoryScales[id] || [];
+            cat.appreciation = "N/A";
+
+            if (cat.isHidden) return;
+            const s = cat.score;
+            let app = "";
+
+            switch (id) {
+                case 'immo':
+                    const sRatio = cat.details.surfaceRatio || 1;
+                    if (isExcluded) app = "Exclu";
+                    else if (immoScore >= 96) app = "Match Parfait";
+                    else if (sRatio > 1.15) app = "Sous-investissement";
+                    else if (sRatio < 0.85) app = "Budget Insuffisant";
+                    else if (immoScore >= 80) app = "Bon Match";
+                    else app = "Décalé";
+                    break;
+                case 'mobility':
+                    const stationsNear = counts.stations || 0;
+                    const hasMetro = props.has_metro || false;
+
+                    if (hasMetro) {
+                        if (s >= 85) app = "Hub hyper-centre";
+                        else app = "Sur le métro";
+                    } else if (stationsNear > 0) {
+                        if (s >= 85) app = "Hub hyper-centre";
+                        else app = "Connecté";
+                    } else {
+                        app = "Loin des gares";
+                    }
+                    break;
+                case 'commute':
+                    if (s < 40) app = "Pénible";
+                    else if (s < 70) app = "Moyen";
+                    else if (s < 90) app = "Confortable";
+                    else app = "Idéal";
+                    break;
+                case 'urbanisme':
+                    app = props.segment_name || "Non segmenté";
+                    break;
+                case 'vieQuartier':
+                    if (s < 30) app = "Calme & Résid.";
+                    else if (s < 60) app = "Pratique & Paisible";
+                    else if (s < 85) app = "Commerçant & Animé";
+                    else app = "Ultra-Animé & Festif";
+                    break;
+
+                case 'socio':
+                    const income = props.demo?.income || 25000;
+                    const socialPct = props.demo?.social_pct || 0;
+                    const ipsVal = props.ips || 100;
+                    if (income < 22000 || socialPct > 35 || ipsVal < 95) app = "Populaire";
+                    else if (income < 35000 || socialPct > 15 || ipsVal < 110) app = "Mixité sociale";
+                    else if (income < 55000 || ipsVal < 125) app = "Aisé";
+                    else app = "Très aisé";
+                    cat.isInformative = true;
+                    break;
+                case 'demo':
+                    const young = props.demo?.young_pct || 0;
+                    const families = props.demo?.family_pct || 0;
+                    const seniors = props.demo?.senior_pct || 0;
+                    if (young > 25) app = "Jeune & Dynamique";
+                    else if (families > 35) app = "Familles & Actifs";
+                    else if (seniors > 25) app = "Calme & Séniors";
+                    else app = "Résidentiel Mature";
+                    cat.isInformative = true;
+                    break;
+                case 'safety':
+                    if (s < 40) app = "Vigilance";
+                    else if (s < 65) app = "Standard";
+                    else if (s < 85) app = "Serein";
+                    else app = "Très sûr";
+                    break;
+                case 'infra':
+                    if (s < 35) app = "Essentiels";
+                    else if (s < 60) app = "Bien équipé";
+                    else if (s < 85) app = "Riche";
+                    else app = "Pôle d'attractivité";
+                    break;
+                case 'education':
+                    if (s < 40) app = "Moyen";
+                    else if (s < 65) app = "Bon";
+                    else if (s < 85) app = "Excellence";
+                    else app = "Élite";
+                    break;
+                case 'finances': {
+                    const fin = props.finances || {};
+                    const taxRate = fin.taxe_fonciere || 0;
+                    if (taxRate === 0) { app = "N/D"; break; }
+                    if (s >= 75) app = "Saine";
+                    else if (s >= 50) app = "Correcte";
+                    else if (s >= 30) app = "Sous pression";
+                    else app = "Fragile";
+                    cat.isInformative = true;
+                    break;
+                }
             }
-        }
 
-        cat.appreciation = app;
-        cat.scale = categoryScales[id] || [];
-        cat.scaleIndex = cat.scale.indexOf(app);
-    });
+            cat.appreciation = app;
+            cat.scale = categoryScales[id] || [];
+            cat.scaleIndex = cat.scale.indexOf(app);
+        });
 
-    // 9. PREFERENCE WEIGHTING (Soft Influence)
-    let preferenceMultiplier = 1.0;
-    Object.entries(categories).forEach(([id, cat]) => {
-        // Find active chip value for this category
-        const container = document.getElementById('pref-' + id);
-        const activeChip = container?.querySelector('.pref-chip.active');
-        const prefValue = activeChip?.getAttribute('data-value');
+        // 9. PREFERENCE WEIGHTING (Soft Influence)
+        let preferenceMultiplier = 1.0;
+        Object.entries(categories).forEach(([id, cat]) => {
+            // Find active chip value for this category
+            const container = document.getElementById('pref-' + id);
+            const activeChip = container?.querySelector('.pref-chip.active');
+            const prefValue = activeChip?.getAttribute('data-value');
 
-        if (prefValue) {
-            const prefIdx = cat.scale.indexOf(prefValue);
-            if (prefIdx !== -1) {
-                const diff = Math.abs(cat.scaleIndex - prefIdx);
-                // Multipliers: 1.0 (exact), 0.6 (1 step), 0.25 (2 steps), 0.1 (3+ steps)
-                const penalties = [1.0, 0.6, 0.25, 0.1];
-                preferenceMultiplier *= (penalties[diff] || 0.1);
+            if (prefValue) {
+                const prefIdx = cat.scale.indexOf(prefValue);
+                if (prefIdx !== -1) {
+                    const diff = Math.abs(cat.scaleIndex - prefIdx);
+                    // Multipliers: 1.0 (exact), 0.6 (1 step), 0.25 (2 steps), 0.1 (3+ steps)
+                    const penalties = [1.0, 0.6, 0.25, 0.1];
+                    preferenceMultiplier *= (penalties[diff] || 0.1);
+                }
             }
-        }
-    });
+        });
 
-    // SCORING LOGIC
-    const mobilityWeight = cachedMobility.hasWorkplaces ? 0.08 : 0.25;
-    const commuteWeight = cachedMobility.hasWorkplaces ? 0.17 : 0.00;
+        // SCORING LOGIC
+        const mobilityWeight = cachedMobility.hasWorkplaces ? 0.08 : 0.25;
+        const commuteWeight = cachedMobility.hasWorkplaces ? 0.17 : 0.00;
 
-    const neighborhoodScore = (
-        mobilityScore * mobilityWeight + 
-        commuteScore * commuteWeight +
-        urbanismeScore * 0.25 + 
-        vieQuartierScore * 0.50
-    );
+        const neighborhoodScore = (
+            mobilityScore * mobilityWeight +
+            commuteScore * commuteWeight +
+            urbanismeScore * 0.25 +
+            vieQuartierScore * 0.50
+        );
 
-    const baseScore = immoScore * 0.4 + neighborhoodScore * 0.6;
-    const total = isExcluded ? 0 : Math.round(baseScore * vibeRatio * preferenceMultiplier);
+        const baseScore = immoScore * 0.4 + neighborhoodScore * 0.6;
+        const total = isExcluded ? 0 : Math.round(baseScore * vibeRatio * preferenceMultiplier);
 
-    return {
-        total: Math.min(100, total),
-        vibeMatch: Math.round(vibeRatio * 100),
-        excluded: isExcluded,
-        reason: exclusionReason,
-        categories,
-        details: {
-            immo: { fitScore, availability, surfaceScore, availabilityPct, availabilityScore, finalAvailabilityPct },
-            mobility: { scores: [] },
-            env: { 
-                nature: props.nature || 0, 
-                isBlue: !!props.is_blue, 
-                nearPark: !!props.near_park, 
-                nearParkName: props.near_park_name || "", 
-                heatResilience: props.heat_resilience || 50, 
-                airQuality: props.air_quality || 50, 
-                coolness: staticScores.coolness 
-            },
-            family: { pediatresCount: pedCount }
-        }
-    };
+        return {
+            total: Math.min(100, total),
+            vibeMatch: Math.round(vibeRatio * 100),
+            excluded: isExcluded,
+            reason: exclusionReason,
+            categories,
+            details: {
+                immo: { fitScore, availability, surfaceScore, availabilityPct, availabilityScore, finalAvailabilityPct },
+                mobility: { scores: [] },
+                env: {
+                    nature: props.nature || 0,
+                    isBlue: !!props.is_blue,
+                    nearPark: !!props.near_park,
+                    nearParkName: props.near_park_name || "",
+                    heatResilience: props.heat_resilience || 50,
+                    airQuality: props.air_quality || 50,
+                    coolness: staticScores.coolness
+                },
+                family: { pediatresCount: pedCount }
+            }
+        };
     } catch (e) {
         console.error("MatchRate Error:", e, props);
         const emptyCat = { score: 0, appreciation: "N/A", ratingColor: "text-gray-300", scale: [], scaleIndex: -1, details: {} };
-        return { 
-            total: 0, 
-            vibeMatch: 0, 
-            categories: { 
-                immo: emptyCat, mobility: emptyCat, commute: emptyCat, urbanisme: emptyCat, vieQuartier: emptyCat, 
+        return {
+            total: 0,
+            vibeMatch: 0,
+            categories: {
+                immo: emptyCat, mobility: emptyCat, commute: emptyCat, urbanisme: emptyCat, vieQuartier: emptyCat,
                 family: emptyCat, infra: emptyCat, safety: emptyCat, socio: emptyCat, demo: emptyCat
-            }, 
-            details: { immo: {}, mobility: {}, env: {} } 
+            },
+            details: { immo: {}, mobility: {}, env: {} }
         };
     }
 }
@@ -3092,7 +3093,7 @@ function style(feature) {
     const insee = props.code || feature.id;
     let isVisible = true;
     let maxWait = 0;
-    
+
     // HIDE SCORE COLORING WHEN ZOOMED IN ON A FOCUS
     // User request: "Once I've zoomed in on a neighborhood, I don't need the match score color coding anymore."
     const zoom = window.map.getZoom();
@@ -3169,15 +3170,15 @@ function style(feature) {
 
     // Selective coloring: if a city is active, only color its IRIS.
     const isHoveredCity = window.hoveredCommuneName && getCommuneName(feature.properties, feature.id) === window.hoveredCommuneName;
-    
+
     // Force visibility for hovered city to show its potential
     if (isHoveredCity) isVisible = true;
 
     const showColor = isHoveredCity || isCityIris || (isVisible && !isActiveCity);
 
-    return { 
-        fillColor: showColor ? getColor(score) : '#ffffff', 
-        stroke: false, 
+    return {
+        fillColor: showColor ? getColor(score) : '#ffffff',
+        stroke: false,
         color: 'transparent',
         weight: 0,
         fillOpacity: showColor ? 0.55 : 0.05, // Increased slightly for click robustness
@@ -3188,19 +3189,19 @@ function style(feature) {
 function highlightFeature(e) {
     const layer = e.target;
     if (layer === selectedLayer) return;
-    
+
     const props = layer.feature.properties;
 
     // Highlight current IRIS with a clean white border
-    layer.setStyle({ 
-        weight: 2, 
-        color: '#ffffff', 
-        opacity: 0.9, 
-        stroke: true, 
-        fillOpacity: 0.85 
+    layer.setStyle({
+        weight: 2,
+        color: '#ffffff',
+        opacity: 0.9,
+        stroke: true,
+        fillOpacity: 0.85
     });
     layer.bringToFront();
-    
+
     info.update(props, !!selectedLayer);
 }
 
@@ -3216,7 +3217,7 @@ function updateProximityCircle(lat, lon) {
     } else {
         window.proximityLayer = L.layerGroup().addTo(window.map);
     }
-    
+
     if (!lat || !lon) {
         window.proximityCircle = null;
         return;
@@ -3245,10 +3246,10 @@ function updateCentroidMarker(lat, lon) {
             iconSize: [12, 12],
             iconAnchor: [6, 6]
         });
-        centroidMarker = L.marker([lat, lon], { 
-            icon: icon, 
-            interactive: false, 
-            zIndexOffset: 1000 
+        centroidMarker = L.marker([lat, lon], {
+            icon: icon,
+            interactive: false,
+            zIndexOffset: 1000
         }).addTo(window.map);
     }
 }
@@ -3265,7 +3266,7 @@ function resetHighlight(e) {
         });
         // Then apply the dynamic style
         layer.setStyle(style(layer.feature));
-        
+
         if (selectedLayer) {
             const p = selectedLayer.feature.properties;
             info.update(p, true);
@@ -3299,39 +3300,39 @@ async function selectFeature(e) {
             deselectFeature();
             return;
         }
-        
+
         const props = layer.feature.properties;
         const prevLayer = selectedLayer;
         selectedLayer = layer;
-        
+
         if (prevLayer) {
             prevLayer.setStyle(style(prevLayer.feature));
         }
 
         // Apply selection style
-        layer.setStyle({ 
-            weight: 4, 
-            color: '#0f172a', 
-            opacity: 1, 
-            stroke: true, 
-            fillOpacity: 0.65 
+        layer.setStyle({
+            weight: 4,
+            color: '#0f172a',
+            opacity: 1,
+            stroke: true,
+            fillOpacity: 0.65
         });
         layer.bringToFront();
 
         // Save view ONLY if it's a real user click, not an auto-selection on landing
         if (!noZoom && !window.isFirstSearch && !e.isAuto) {
             lastView = { center: map.getCenter(), zoom: map.getZoom() };
-            
+
             // Re-instantiate zoom logic: center on IRIS and zoom to level 14-15
             const bounds = layer.getBounds();
-            map.flyToBounds(bounds, { 
-                padding: [40, 40], 
-                maxZoom: 15, 
+            map.flyToBounds(bounds, {
+                padding: [40, 40],
+                maxZoom: 15,
                 duration: 1.2,
                 easeLinearity: 0.25
             });
         }
-        
+
         await window.updateWalkingPath(props);
         if (props.lat && props.lon) {
             updateCentroidMarker(props.lat, props.lon);
@@ -3356,7 +3357,7 @@ function deselectFeature() {
     if (selectedLayer) {
         const prev = selectedLayer;
         selectedLayer = null; // Clear state FIRST so style() returns 'not selected'
-        
+
         prev.setStyle({
             stroke: false,
             weight: 0,
@@ -3364,13 +3365,13 @@ function deselectFeature() {
             color: 'transparent'
         });
         prev.setStyle(style(prev.feature));
-        
+
         if (window.walkingPathsGroup) window.walkingPathsGroup.clearLayers();
         info.update();
         if (window.renderActiveLayers) window.renderActiveLayers();
-        if (lastView) { 
-            map.flyTo(lastView.center, lastView.zoom, { duration: 0.8 }); 
-            lastView = null; 
+        if (lastView) {
+            map.flyTo(lastView.center, lastView.zoom, { duration: 0.8 });
+            lastView = null;
         }
     }
 
@@ -3435,7 +3436,7 @@ function updateProgress(percent, status) {
 
 // --- DATA LOADING & INDEXING ---
 // Preference Selection Logic
-window.selectPref = function(category, value, element) {
+window.selectPref = function (category, value, element) {
     const container = document.getElementById('pref-' + category);
     if (!container) return;
 
@@ -3455,14 +3456,14 @@ async function initApp() {
         let pricesData, pediatreIrisData, pediatrePointsData, gpeData;
         try {
             const res = await Promise.all([
-                fetch('/idf_prices.json').then(r => { if(!r.ok) throw new Error("idf_prices.json not found"); return r.json(); }),
-                fetch('/pediatres_by_iris.json').then(r => { if(!r.ok) throw new Error("pediatres_by_iris.json not found"); return r.json(); }),
-                fetch('/pediatres.geojson').then(r => { if(!r.ok) throw new Error("pediatres.geojson not found"); return r.json(); }),
-                fetch('/gpe_stations_new.geojson').then(r => { if(!r.ok) throw new Error("gpe_stations_new.geojson not found"); return r.json(); }),
-                fetch('/transit_lines_simplified.geojson').then(r => { if(!r.ok) throw new Error("transit_lines_simplified.geojson not found"); return r.json(); }),
-                fetch('/stations.geojson').then(r => { if(!r.ok) throw new Error("stations.geojson not found"); return r.json(); }),
-                fetch('/city_centers.geojson').then(r => { if(!r.ok) throw new Error("city_centers.geojson not found"); return r.json(); }),
-                fetch('/mairies.geojson').then(r => { if(!r.ok) throw new Error("mairies.geojson not found"); return r.json(); }),
+                fetch('/idf_prices.json').then(r => { if (!r.ok) throw new Error("idf_prices.json not found"); return r.json(); }),
+                fetch('/pediatres_by_iris.json').then(r => { if (!r.ok) throw new Error("pediatres_by_iris.json not found"); return r.json(); }),
+                fetch('/pediatres.geojson').then(r => { if (!r.ok) throw new Error("pediatres.geojson not found"); return r.json(); }),
+                fetch('/gpe_stations_new.geojson').then(r => { if (!r.ok) throw new Error("gpe_stations_new.geojson not found"); return r.json(); }),
+                fetch('/transit_lines_simplified.geojson').then(r => { if (!r.ok) throw new Error("transit_lines_simplified.geojson not found"); return r.json(); }),
+                fetch('/stations.geojson').then(r => { if (!r.ok) throw new Error("stations.geojson not found"); return r.json(); }),
+                fetch('/city_centers.geojson').then(r => { if (!r.ok) throw new Error("city_centers.geojson not found"); return r.json(); }),
+                fetch('/mairies.geojson').then(r => { if (!r.ok) throw new Error("mairies.geojson not found"); return r.json(); }),
                 fetch('/walking_metadata.json').then(r => r.json()).catch(() => ({}))
             ]);
             pricesData = res[0];
@@ -3507,12 +3508,12 @@ async function initApp() {
                         lines: p.indice_lig || p.res_com || p.line || p.route_short_name || ""
                     };
                 });
-            
+
             // Legacy support for has_metro calculation below
             window.metroStationsData = (window.allStationsData || []).filter(s => s.mode === "METRO");
-            
+
             window.transitLinesLayer = L.geoJSON(transitData, {
-                style: function(feature) {
+                style: function (feature) {
                     const color = feature.properties.route_color ? `#${feature.properties.route_color}` : (idfmColors[feature.properties.route_short_name]?.bg || '#3388ff');
                     return {
                         color: color,
@@ -3526,7 +3527,7 @@ async function initApp() {
             console.error("❌ Data Fetch Error (Phase 1):", e);
             throw e;
         }
-        
+
 
         window.pediatresByIris = pediatreIrisData;
         window.pediatresIndex = {};
@@ -3543,7 +3544,7 @@ async function initApp() {
         updateProgress(25, 'Commutes...');
         let journeysData;
         try {
-            journeysData = await fetch('/precomputed_journeys.json').then(r => { if(!r.ok) throw new Error("precomputed_journeys.json not found"); return r.json(); });
+            journeysData = await fetch('/precomputed_journeys.json').then(r => { if (!r.ok) throw new Error("precomputed_journeys.json not found"); return r.json(); });
         } catch (e) {
             console.error("❌ Data Fetch Error (Journeys):", e);
             throw e;
@@ -3552,7 +3553,7 @@ async function initApp() {
         updateProgress(40, 'Frontières...');
         let geojsonData;
         try {
-            geojsonData = await fetch('/idf-quartiers-optimized.geojson').then(r => { if(!r.ok) throw new Error("idf-quartiers-optimized.geojson not found"); return r.json(); });
+            geojsonData = await fetch('/idf-quartiers-optimized.geojson').then(r => { if (!r.ok) throw new Error("idf-quartiers-optimized.geojson not found"); return r.json(); });
         } catch (e) {
             console.error("❌ Data Fetch Error (GeoJSON):", e);
             throw e;
@@ -3566,7 +3567,7 @@ async function initApp() {
                 window.pebByIris = await pebRes.json();
                 console.log("✅ PEB Precomputed data loaded:", Object.keys(window.pebByIris).length, "IRIS impacted");
             }
-            
+
             // Lazy load PEB geometries for mapping
             fetchPEBGeometries();
         } catch (e) {
@@ -3576,13 +3577,17 @@ async function initApp() {
         updateProgress(95, 'Finalisation...');
         idfPrices = pricesData;
         window.precomputedJourneysRaw = journeysData;
-        
+
         // Lazy load detailed baked index in background
         fetch('/baked_index.json').then(r => r.json()).then(data => {
             window.neighborhoodNeighbors = data.neighbors;
             window.pointsByInsee = data.points;
             window.bakedTransactions = data.transactions;
             console.log("✅ Detailed index loaded in background");
+
+            // NOUVEAU : On pré-construit les marqueurs ici !
+            window.buildAllMarkersOnce();
+
             if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
             if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
             renderActiveLayers();
@@ -3605,7 +3610,7 @@ async function initApp() {
             });
         }
 
-        window.toggleInfoModal = function(show) {
+        window.toggleInfoModal = function (show) {
             const modal = document.getElementById('info-modal');
             if (!modal) return;
             if (show) {
@@ -3647,15 +3652,15 @@ async function initApp() {
             }
         });
 
-        geojsonLayer = L.geoJSON(geojsonData, { 
-            style: style, 
+        geojsonLayer = L.geoJSON(geojsonData, {
+            style: style,
             onEachFeature: onEachFeature,
             pane: 'neighborhoods'
         }).addTo(map);
         window.geojsonLayer = geojsonLayer;
         buildSearchIndex(geojsonData);
         refreshMobilityCache(geojsonData);
-        
+
         // Prevent map clicks when interacting with the left panel
         const uiPanel = document.getElementById('ui-panel');
         if (uiPanel) {
@@ -3701,9 +3706,9 @@ async function initApp() {
                     </div>
                     <div class="text-[10px] text-gray-500 font-medium border-t border-gray-100 pt-1.5 flex flex-wrap gap-1">
                         ${s.lines.map(l => {
-                            const c = idfmColors[l] || { bg: "#eee", text: "#000" };
-                            return `<span class="px-1.5 py-0.5 rounded-md text-[8px] font-bold" style="background-color: ${c.bg}; color: ${c.text};">L.${l}</span>`;
-                        }).join('')}
+                const c = idfmColors[l] || { bg: "#eee", text: "#000" };
+                return `<span class="px-1.5 py-0.5 rounded-md text-[8px] font-bold" style="background-color: ${c.bg}; color: ${c.text};">L.${l}</span>`;
+            }).join('')}
                     </div>
                 </div>
             `).on('click', (e) => L.DomEvent.stopPropagation(e));
@@ -3780,7 +3785,7 @@ async function initApp() {
             const innerHtml = props.is_covered ? '🏪' : '🧺';
             const borderColor = props.is_covered ? 'border-amber-600' : 'border-green-500';
             const bgColor = props.is_covered ? 'bg-amber-50' : 'bg-green-50';
-            
+
             return L.marker(latlng, {
                 icon: L.divIcon({
                     html: `<div class="${bgColor} rounded-full w-6 h-6 flex items-center justify-center border ${borderColor} shadow-md text-sm overflow-hidden">${innerHtml}</div>`,
@@ -3798,7 +3803,7 @@ async function initApp() {
                     </div>
                 </div>
             `, { maxWidth: 250 })
-            .on('click', (e) => L.DomEvent.stopPropagation(e));
+                .on('click', (e) => L.DomEvent.stopPropagation(e));
         };
         window.rivieraPointToLayer = (f, latlng) => {
             const emo = f.properties.emoji || "🌊";
@@ -3824,7 +3829,7 @@ async function initApp() {
             let bgColor = 'bg-white';
             const name = (props.name || "").toLowerCase();
             const isBio = props.category === 'bio' || props.is_biocoop || props.is_naturalia || (props.name && props.name.toLowerCase().includes('bio'));
-            
+
             if (isBio) {
                 innerHtml = `
                     <svg viewBox="0 0 100 100" style="width: 14px; height: 14px; border-radius: 2px;" xmlns="http://www.w3.org/2000/svg">
@@ -4001,7 +4006,7 @@ async function initApp() {
         // Stations & Schools layers are managed in renderActiveLayers
 
         updateFilters();
-        
+
         // Enable default groups & layers on startup
         if (window.updateChildState) {
             window.updateChildState('maps');
@@ -4017,7 +4022,7 @@ async function initApp() {
                 loader.style.opacity = '0';
                 setTimeout(() => { loader.style.display = 'none'; }, 700);
             }
-            
+
             // Sélection initiale gérée par updateFilters + isFirstSearch
         }, 300);
 
@@ -4047,10 +4052,10 @@ function updateFilters() {
 function _updateFilters() {
     if (!window.geojsonLayer) return;
     console.log("⚡ Refreshing map filters...");
-    
+
     isVibeActiveCached = !!document.querySelector('.vibe-chip.active');
     if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
-    
+
     // Batch processing to avoid long tasks
     requestAnimationFrame(() => {
         geojsonLayer.setStyle(style);
@@ -4060,7 +4065,7 @@ function _updateFilters() {
         window.topMatchTimeout = setTimeout(() => {
             updateTopMatches();
         }, 300);
-        
+
         if (window.updateEspacesVertsVisibility) window.updateEspacesVertsVisibility();
         if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
         if (window.updateGPELinesVisibility) window.updateGPELinesVisibility();
@@ -4082,7 +4087,7 @@ const getNoiseWeight = (meters, featureWeight) => {
 window.updateNoiseVisibility = async () => {
     const show = document.getElementById('show-noise')?.checked;
     const zoom = map.getZoom();
-    updateFilters(); 
+    updateFilters();
 
     if (!show) {
         if (noiseInfraLayer) map.removeLayer(noiseInfraLayer);
@@ -4107,8 +4112,8 @@ window.updateNoiseVisibility = async () => {
         const layersConfig = [
             { color: '#fde047', meters: 400, opacity: 0.012, minZoom: 14 }, // Distant Hum (400m)
             { color: '#fb923c', meters: 180, opacity: 0.025, minZoom: 13 }, // Outer Mist (180m)
-            { color: '#ef4444', meters: 70,  opacity: 0.05,  minZoom: 11 }, // Mid Glow (70m)
-            { color: '#7f1d1d', meters: 15,  opacity: 0.25,  minZoom: 9 }   // Core (15m)
+            { color: '#ef4444', meters: 70, opacity: 0.05, minZoom: 11 }, // Mid Glow (70m)
+            { color: '#7f1d1d', meters: 15, opacity: 0.25, minZoom: 9 }   // Core (15m)
         ];
 
         layersConfig.forEach(cfg => {
@@ -4202,7 +4207,7 @@ window.updateMairiesVisibility = () => {
 window.updateCentreVilleVisibility = () => {
     const show = document.getElementById('show-centre-ville')?.checked;
     const legend = document.getElementById('city-centers-legend');
-    
+
     if (legend) {
         if (show) legend.classList.remove('hidden');
         else legend.classList.add('hidden');
@@ -4219,7 +4224,7 @@ window.updateCentreVilleVisibility = () => {
     const isSimplified = zoom < 14;
 
     console.log("✨ Rendering magnetic attractivity perimeters for", window.activeCommuneName, "Zoom:", zoom, "Simplified:", isSimplified);
-    
+
     const personaStyles = {
         "Pôle de Mobilité": { color: '#8b5cf6', fill: '#a78bfa', icon: '🚉' },
         "Cœur Historique": { color: '#f59e0b', fill: '#fbbf24', icon: '🏺' },
@@ -4227,7 +4232,7 @@ window.updateCentreVilleVisibility = () => {
         "Quartier Culturel": { color: '#ec4899', fill: '#f472b6', icon: '🎭' },
         "Pôle de Vie": { color: '#10b981', fill: '#34d399', icon: '🌱' }
     };
-    
+
     (window.cityCentersData.features || []).forEach(feature => {
         const props = feature.properties;
         const name = props.name || "";
@@ -4235,7 +4240,7 @@ window.updateCentreVilleVisibility = () => {
 
         try {
             const s = personaStyles[props.persona] || personaStyles["Pôle de Vie"];
-            
+
             // Render polygon only if zoomed in or if it's a very large area (optional)
             if (zoom >= 13) {
                 const geoLayer = L.geoJSON(feature, {
@@ -4252,7 +4257,7 @@ window.updateCentreVilleVisibility = () => {
             }
 
             const centroid = turf.centroid(feature).geometry.coordinates;
-            
+
             const pills = [
                 { key: 'boulangerie_count', icon: '🍞', label: 'Boulangerie' },
                 { key: 'boucherie_count', icon: '🥩', label: 'Boucherie' },
@@ -4275,7 +4280,7 @@ window.updateCentreVilleVisibility = () => {
                 const tx = Math.cos(radian) * radius;
                 const ty = Math.sin(radian) * radius;
                 const isPresent = props[p.key] > 0 || props[p.key] === true;
-                
+
                 let iconHtml = p.icon;
                 if (p.icon === 'AB') {
                     iconHtml = `
@@ -4337,14 +4342,14 @@ window.updateCentreVilleVisibility = () => {
                 L.DomEvent.stopPropagation(e);
                 const el = marker.getElement().querySelector('.city-center-marker-container');
                 const isActive = el.classList.contains('active');
-                
+
                 // Close all other active markers
                 document.querySelectorAll('.city-center-marker-container.active').forEach(c => {
                     if (c !== el) c.classList.remove('active');
                 });
-                
+
                 el.classList.toggle('active');
-                
+
                 // If opening, maybe zoom a bit?
                 if (el.classList.contains('active')) {
                     // window.map.setView([centroid[1], centroid[0]], Math.max(window.map.getZoom(), 15));
@@ -4382,70 +4387,44 @@ function getVisibleInseeCodes() {
     if (!window.map || !window.geojsonLayer) return [];
     const bounds = window.map.getBounds();
     const visible = new Set();
-    
+
     // Use bounds intersection for robust visibility detection
     window.geojsonLayer.eachLayer(layer => {
         if (bounds.intersects(layer.getBounds())) {
             visible.add(layer.feature.properties.code || layer.feature.id);
         }
     });
-    
+
     return Array.from(visible);
 }
 
 function renderActiveLayers() {
     if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
-    if (!window.map) return;
+    if (!window.map || !window.prebuiltMarkers) return;
+
     const zoom = window.map.getZoom();
-    
+
     // Zoom thresholds (more permissive if a city is selected)
     const isActiveCity = window.activeCommuneCodes && window.activeCommuneCodes.length > 0;
-    const showBasePoints = zoom >= 14 || (isActiveCity && zoom >= 12); 
+    const showBasePoints = zoom >= 14 || (isActiveCity && zoom >= 12);
     const showDetailedPoints = zoom >= 14.5 || (isActiveCity && zoom >= 12.5);
-    
-    const layers = {
-        stations: window.stationsLayer,
-        schools: window.schoolsLayer,
-        commerces: window.commercesLayer,
-        amenities: window.amenitiesLayer,
-        sport: window.sportLayer,
-        culture: window.cultureLayer,
-        pediatres: window.pediatresLayer,
-        marche: window.marcheLayer,
-        mairies: window.mairiesLayer,
-        riviera: window.rivieraLayer,
-        gpe: window.gpeLayer,
-        transitLines: window.transitLinesLayer
-    };
 
-    // Clear everything
-    for (const key in layers) {
-        if (layers[key] && key !== 'transitLines') layers[key].clearLayers();
-    }
-
-    // Read checkbox states first so we can handle global layers regardless of zoom
+    // --- 1. Gestion des calques globaux (Lignes, Bruit, Espaces Verts...) ---
     const showStations = document.getElementById('show-stations')?.checked;
-    
-    // Handle global transit lines layer regardless of zoom
+
     if (showStations && window.transitLinesLayer) {
-        if (!window.map.hasLayer(window.transitLinesLayer)) {
-            window.transitLinesLayer.addTo(window.map);
-        }
+        if (!window.map.hasLayer(window.transitLinesLayer)) window.transitLinesLayer.addTo(window.map);
     } else if (window.transitLinesLayer) {
         window.map.removeLayer(window.transitLinesLayer);
     }
 
-    // Handle Grand Paris Express lines & stations
     const showGPE = document.getElementById('show-gpe-lines')?.checked || false;
     if (showGPE) {
         if (window.gpeLinesLayer && !window.map.hasLayer(window.gpeLinesLayer)) window.gpeLinesLayer.addTo(window.map);
-        if (window.gpeLayer && !window.map.hasLayer(window.gpeLayer)) window.gpeLayer.addTo(window.map);
     } else {
         if (window.gpeLinesLayer) window.map.removeLayer(window.gpeLinesLayer);
-        if (window.gpeLayer) window.map.removeLayer(window.gpeLayer);
     }
 
-    // Handle Espaces Verts
     const showEspacesVerts = document.getElementById('show-espaces-verts')?.checked || false;
     if (showEspacesVerts && window.espacesVertsLayer) {
         if (!window.map.hasLayer(window.espacesVertsLayer)) window.espacesVertsLayer.addTo(window.map);
@@ -4453,7 +4432,6 @@ function renderActiveLayers() {
         window.map.removeLayer(window.espacesVertsLayer);
     }
 
-    // Handle Airport Noise (PEB)
     const showPEB = document.getElementById('show-peb')?.checked || false;
     if (showPEB && window.updatePEBVisibility) {
         window.updatePEBVisibility();
@@ -4461,23 +4439,32 @@ function renderActiveLayers() {
         window.map.removeLayer(window.pebLayer);
     }
 
-    if (zoom < 14) {
+    // --- 2. Vider les LayerGroups (Ultra-rapide, détache juste les objets sans les détruire) ---
+    window.stationsLayer.clearLayers();
+    window.schoolsLayer.clearLayers();
+    window.commercesLayer.clearLayers();
+    window.amenitiesLayer.clearLayers();
+    window.sportLayer.clearLayers();
+    window.cultureLayer.clearLayers();
+    window.pediatresLayer.clearLayers();
+    window.marcheLayer.clearLayers();
+    window.mairiesLayer.clearLayers();
+    window.rivieraLayer.clearLayers();
+    window.gpeLayer.clearLayers();
+
+    // Si on est trop dézoomé, on s'arrête là (sauf si une ville est sélectionnée)
+    if (zoom < 14 && !isActiveCity) {
         if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
         if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
         if (window.updateWalkingLabelsZoom) window.updateWalkingLabelsZoom();
-        
-        // Clear walking paths if zoomed out too far
+
         if (zoom < 13 && window.walkingPathsGroup) {
             window.walkingPathsGroup.clearLayers();
         }
-        
         return;
     }
 
-    const visibleIds = window.visibleInseeCache && window.visibleInseeCache.length > 0 ? window.visibleInseeCache : getVisibleInseeCodes();
-    const allPoints = window.pointsByInsee || {};
-    const showCycle = document.getElementById('show-cycle')?.checked; // Assuming showCycle handled elsewhere or here? Wait, showCycle actually toggles a different layer, let's keep it handled by updatePathsVisibility.
-
+    // --- 3. Lecture de l'état de tous les filtres ---
     const grpCommerces = document.getElementById('group-commerces')?.checked;
     const showBoulangerie = document.getElementById('show-boulangerie')?.checked;
     const showBoucherie = document.getElementById('show-boucherie')?.checked;
@@ -4487,12 +4474,7 @@ function renderActiveLayers() {
     const showSupermarche = document.getElementById('show-supermarche')?.checked;
     const showCommercesAutres = document.getElementById('show-commerces-autres')?.checked;
     const showMarche = document.getElementById('show-marche')?.checked;
-    const marketLegend = document.getElementById('market-legend');
-    if (marketLegend) {
-        if ((grpCommerces || showMarche) && showDetailedPoints) marketLegend.classList.remove('hidden');
-        else marketLegend.classList.add('hidden');
-    }
-    
+
     const grpSante = document.getElementById('group-sante')?.checked;
     const showPharmacie = document.getElementById('show-pharmacie')?.checked;
     const showPediatres = document.getElementById('show-pediatres')?.checked;
@@ -4506,16 +4488,24 @@ function renderActiveLayers() {
 
     const grpInfra = document.getElementById('group-infra')?.checked;
     const showSchools = document.getElementById('show-schools')?.checked;
-    const schoolLegend = document.getElementById('school-legend');
-    if (schoolLegend) {
-        if (showSchools) schoolLegend.classList.remove('hidden');
-        else schoolLegend.classList.add('hidden');
-    }
     const showCreches = document.getElementById('show-creches')?.checked;
     const showSport = document.getElementById('show-sport')?.checked;
     const showCulture = document.getElementById('show-culture')?.checked;
     const showBiblios = document.getElementById('show-biblios')?.checked;
     const showMairies = document.getElementById('show-mairies')?.checked;
+
+    // Gestion des légendes
+    const marketLegend = document.getElementById('market-legend');
+    if (marketLegend) {
+        if ((grpCommerces || showMarche) && showDetailedPoints) marketLegend.classList.remove('hidden');
+        else marketLegend.classList.add('hidden');
+    }
+
+    const schoolLegend = document.getElementById('school-legend');
+    if (schoolLegend) {
+        if (showSchools) schoolLegend.classList.remove('hidden');
+        else schoolLegend.classList.add('hidden');
+    }
 
     const activeCommerces = [];
     if (showBoulangerie) activeCommerces.push('boulangerie');
@@ -4524,7 +4514,7 @@ function renderActiveLayers() {
     if (showSurgeles) activeCommerces.push('picard', 'surgeles');
     if (showBio) activeCommerces.push('bio', 'magasin bio');
     if (showSupermarche) activeCommerces.push('supermarket', 'supermarche', 'supermarché');
-    if (showCommercesAutres) activeCommerces.push('commerces', 'autre', 'marche', 'caviste', 'poissonnerie', 'fleuriste', 'chocolatier', 'epicerie_fine', 'primeur', 'habillement', 'jouets', 'chaussures'); 
+    if (showCommercesAutres) activeCommerces.push('commerces', 'autre', 'marche', 'caviste', 'poissonnerie', 'fleuriste', 'chocolatier', 'epicerie_fine', 'primeur', 'habillement', 'jouets', 'chaussures');
     if (showPharmacie) activeCommerces.push('pharmacie');
     if (showRestaurant) activeCommerces.push('restaurant');
     if (showFastFood) activeCommerces.push('fast_food');
@@ -4542,129 +4532,134 @@ function renderActiveLayers() {
         marche: (grpCommerces || showMarche || showCommercesAutres) && showDetailedPoints,
         mairies: showMairies && showDetailedPoints,
         riviera: document.getElementById('show-riviera')?.checked && showDetailedPoints,
-        gpe: document.getElementById('show-gpe-lines')?.checked || false,
-        transitLines: showStations
+        gpe: showGPE
     };
 
+    // --- 4. Boucle rapide sur le CACHE (window.prebuiltMarkers) ---
+    const visibleIds = window.visibleInseeCache && window.visibleInseeCache.length > 0 ? window.visibleInseeCache : getVisibleInseeCodes();
+
     visibleIds.forEach(id => {
-        const irisPoints = allPoints[id];
-        if (!irisPoints) return;
+        const irisMarkers = window.prebuiltMarkers[id];
+        if (!irisMarkers) return;
 
-        for (const key in layers) {
-            if (toggles[key] && irisPoints[key]) {
-                if (key === 'transitLines') continue;
-                
-                irisPoints[key].forEach(f => {
-                    const cat = (f.properties.category || '').toLowerCase();
-                    const type = (f.properties.type || '').toLowerCase();
-                    const isBioProp = f.properties.is_biocoop || f.properties.is_naturalia || (f.properties.name || '').toLowerCase().includes('bio');
-                    const isPicardProp = f.properties.is_picard || (f.properties.name || '').toLowerCase().includes('picard');
+        // Points simples
+        if (toggles.stations && irisMarkers.stations) irisMarkers.stations.forEach(m => window.stationsLayer.addLayer(m));
+        if (toggles.schools && irisMarkers.schools) irisMarkers.schools.forEach(m => window.schoolsLayer.addLayer(m));
+        if (toggles.marche && irisMarkers.marche) irisMarkers.marche.forEach(m => window.marcheLayer.addLayer(m));
+        if (toggles.riviera && irisMarkers.riviera) irisMarkers.riviera.forEach(m => window.rivieraLayer.addLayer(m));
+        if (toggles.pediatres && irisMarkers.pediatres) irisMarkers.pediatres.forEach(m => window.pediatresLayer.addLayer(m));
 
-                    if (key === 'commerces' && !(grpCommerces && grpSante && grpSorties)) {
-                        let allowed = false;
-                        if (grpCommerces && ['boulangerie', 'boucherie', 'butcher', 'fromagerie', 'cheese', 'picard', 'surgeles', 'bio', 'magasin bio', 'supermarket', 'supermarche', 'supermarché', 'marche', 'caviste', 'commerces', 'cafe', 'poissonnerie', 'fleuriste', 'chocolatier', 'epicerie_fine'].includes(cat)) allowed = true;
-                        if (grpCommerces && isBioProp) allowed = true;
-                        if (grpCommerces && isPicardProp) allowed = true;
-                        if (grpSante && cat === 'pharmacie') allowed = true;
-                        if (grpSorties && ['restaurant', 'fast_food', 'bar', 'pub'].includes(cat)) allowed = true;
-                        if (!allowed && activeCommerces.length > 0) {
-                            if (activeCommerces.includes(cat)) allowed = true;
-                            if (activeCommerces.includes('bio') && isBioProp) allowed = true;
-                            if (activeCommerces.includes('picard') && isPicardProp) allowed = true;
-                        }
-                        if (!allowed) return;
-                    }
+        // Commerces (Filtrage ultra-rapide en mémoire)
+        if (toggles.commerces && irisMarkers.commerces) {
+            irisMarkers.commerces.forEach(m => {
+                let allowed = false;
+                const cat = m._featureCategory;
+                const isBioProp = m._isBio;
+                const isPicardProp = m._isPicard;
 
-                    if (key === 'amenities' || key === 'sport' || key === 'culture') {
-                        let allowed = false;
-                        if (grpInfra) allowed = true;
-                        if (showCulture && ['cinema', 'theatre', 'institution_culturelle'].includes(cat)) allowed = true;
-                        if (showSport && ['tennis', 'swimming_pool', 'sport', 'stadium', 'gym', 'piscine', 'musique'].includes(cat)) allowed = true;
-                        if (showBiblios && ['bibliotheque', 'library', 'mediatheque'].includes(cat)) allowed = true;
-                        if (showCreches && (cat === 'creche' || type === 'creche')) allowed = true;
-                        if (!allowed) return;
-                    }
+                // Mode "Tout afficher" (Groupes cochés)
+                if (grpCommerces && ['boulangerie', 'boucherie', 'butcher', 'fromagerie', 'cheese', 'picard', 'surgeles', 'bio', 'magasin bio', 'supermarket', 'supermarche', 'supermarché', 'marche', 'caviste', 'commerces', 'cafe', 'poissonnerie', 'fleuriste', 'chocolatier', 'epicerie_fine'].includes(cat)) allowed = true;
+                if (grpCommerces && isBioProp) allowed = true;
+                if (grpCommerces && isPicardProp) allowed = true;
+                if (grpSante && cat === 'pharmacie') allowed = true;
+                if (grpSorties && ['restaurant', 'fast_food', 'bar', 'pub'].includes(cat)) allowed = true;
 
-                    const latlng = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
-                    let m;
-                    if (key === 'stations') {
-                        // Filter out GPE lines from standard stations layer
-                        const line = (f.properties.indice_lig || "").toString();
-                        if (['15', '16', '17', '18'].includes(line)) return;
-                        m = window.stationPointToLayer(f, latlng);
-                    }
-                    else if (key === 'schools') m = window.schoolPointToLayer(f, latlng);
-                    else if (key === 'commerces') m = window.commercePointToLayer(f, latlng);
-                    else if (key === 'amenities' || key === 'sport' || key === 'culture') m = window.amenityPointToLayer(f, latlng);
-                    else if (key === 'pediatres') m = window.pediatrePointToLayer(f, latlng);
-                    else if (key === 'mairies') m = window.mairiePointToLayer(f, latlng);
-                    else if (key === 'marche') m = window.marchePointToLayer(f, latlng);
-                    else if (key === 'riviera') m = window.rivieraPointToLayer(f, latlng);
-                    
-                    if (m) m.addTo(layers[key]);
-                });
-            }
+                // Mode Individuel
+                if (!allowed && activeCommerces.length > 0) {
+                    if (activeCommerces.includes(cat)) allowed = true;
+                    if (activeCommerces.includes('bio') && isBioProp) allowed = true;
+                    if (activeCommerces.includes('picard') && isPicardProp) allowed = true;
+                }
+
+                if (allowed) window.commercesLayer.addLayer(m);
+            });
         }
-        
-        // Special case: Pediatres are also in window.pediatresIndex
-        if (toggles.pediatres && window.pediatresIndex?.[id]) {
+
+        // Amenities / Culture / Sport
+        if (toggles.amenities) {
+            const filterAmenity = (m) => {
+                const cat = m._featureCategory;
+                const type = m._featureType;
+                let allowed = false;
+                if (grpInfra) allowed = true;
+                if (showCulture && ['cinema', 'theatre', 'institution_culturelle'].includes(cat)) allowed = true;
+                if (showSport && ['tennis', 'swimming_pool', 'sport', 'stadium', 'gym', 'piscine', 'musique'].includes(cat)) allowed = true;
+                if (showBiblios && ['bibliotheque', 'library', 'mediatheque'].includes(cat)) allowed = true;
+                if (showCreches && (cat === 'creche' || type === 'creche')) allowed = true;
+                return allowed;
+            };
+
+            if (irisMarkers.amenities) irisMarkers.amenities.forEach(m => { if (filterAmenity(m)) window.amenitiesLayer.addLayer(m); });
+            if (irisMarkers.sport) irisMarkers.sport.forEach(m => { if (filterAmenity(m)) window.sportLayer.addLayer(m); });
+            if (irisMarkers.culture) irisMarkers.culture.forEach(m => { if (filterAmenity(m)) window.cultureLayer.addLayer(m); });
+        }
+
+        // Fallback Pédiatres si non présents dans prebuiltMarkers mais présents dans pediatresIndex
+        if (toggles.pediatres && (!irisMarkers.pediatres || irisMarkers.pediatres.length === 0) && window.pediatresIndex?.[id]) {
             window.pediatresIndex[id].forEach(f => {
                 const latlng = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
                 const m = window.pediatrePointToLayer(f, latlng);
-                if (m) m.addTo(layers.pediatres);
+                if (m) window.pediatresLayer.addLayer(m);
             });
         }
     });
 
-    // Special case: Mairies are also a global layer but rendered only in viewport for performance if many, 
-    // but here we have ~2000 so we can just render those in viewport.
+    // --- 5. Données "Globales" (Calculées uniquement si dans le viewport) ---
     if (toggles.mairies && window.mairiesData) {
+        const bounds = window.map.getBounds();
         window.mairiesData.features.forEach(f => {
             const latlng = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
-            if (window.map.getBounds().contains(latlng)) {
+            if (bounds.contains(latlng)) {
                 const m = window.mairiePointToLayer(f, latlng);
-                if (m) m.addTo(layers.mairies);
+                if (m) window.mairiesLayer.addLayer(m);
             }
         });
     }
-    
-    // transitLines handled at top
 
-
-    // Populate GPE layer
     if (toggles.gpe && window.gpeStationsData) {
+        const bounds = window.map.getBounds();
         window.gpeStationsData.forEach(s => {
             const latlng = [s.lat, s.lon];
-            if (window.map.getBounds().contains(latlng)) {
+            if (bounds.contains(latlng)) {
                 const m = window.gpePointToLayer(s, latlng);
-                if (m) m.addTo(window.gpeLayer);
+                if (m) window.gpeLayer.addLayer(m);
             }
         });
     }
 
-    for (const key in layers) {
-        const layer = layers[key];
-        if (!layer || key === 'transitLines') continue;
-        if (toggles[key]) {
-            if (!window.map.hasLayer(layer)) window.map.addLayer(layer);
-        } else {
+    // --- 6. Ajouter / Retirer les LayerGroups de la carte ---
+    const layersMap = [
+        { toggle: toggles.stations, layer: window.stationsLayer },
+        { toggle: toggles.schools, layer: window.schoolsLayer },
+        { toggle: toggles.commerces, layer: window.commercesLayer },
+        { toggle: toggles.amenities, layer: window.amenitiesLayer },
+        { toggle: toggles.amenities, layer: window.sportLayer },
+        { toggle: toggles.amenities, layer: window.cultureLayer },
+        { toggle: toggles.pediatres, layer: window.pediatresLayer },
+        { toggle: toggles.marche, layer: window.marcheLayer },
+        { toggle: toggles.riviera, layer: window.rivieraLayer },
+        { toggle: toggles.mairies, layer: window.mairiesLayer },
+        { toggle: toggles.gpe, layer: window.gpeLayer }
+    ];
+
+    layersMap.forEach(({ toggle, layer }) => {
+        if (toggle && !window.map.hasLayer(layer)) {
+            window.map.addLayer(layer);
+        } else if (!toggle && window.map.hasLayer(layer)) {
             window.map.removeLayer(layer);
         }
-    }
+    });
 
+    // Appels annexes habituels
     if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
     if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
     if (window.updateWalkingLabelsZoom) window.updateWalkingLabelsZoom();
 
-    // Refresh IRIS style (for the zoom check)
+    // Rafraichir le style des IRIS (important pour le zoom check du stroke blanc)
     if (window.geojsonLayer) {
         window.geojsonLayer.setStyle(style);
     }
 }
-
-
-
-
 
 window.transactionLayer = L.markerClusterGroup({
     maxClusterRadius: 40,
@@ -4678,9 +4673,9 @@ window.transactionLayer = L.markerClusterGroup({
     }
 }).addTo(window.map);
 
-window.updateTransactionsVisibility = function() {
+window.updateTransactionsVisibility = function () {
     if (!window.transactionLayer || !window.bakedTransactions || !window.map) return;
-    
+
     const isChecked = document.getElementById('show-transactions')?.checked;
     if (!isChecked) {
         window.transactionLayer.clearLayers();
@@ -4695,11 +4690,11 @@ window.updateTransactionsVisibility = function() {
 
     window.transactionLayer.clearLayers();
 
-    const budget = parseInt(document.getElementById('budget-input')?.value || 2000000); 
+    const budget = parseInt(document.getElementById('budget-input')?.value || 2000000);
     const currentType = window.currentPropertyType || 'all';
 
     const visibleIds = getVisibleInseeCodes();
-    
+
     visibleIds.forEach(id => {
         const d = window.bakedTransactions[id];
         if (!d) return;
@@ -4715,8 +4710,8 @@ window.updateTransactionsVisibility = function() {
 
         list.forEach(t => {
             if (t.price > budget * 1.1) return; // Allow 10% margin for budget
-            
-            const isMatch = t.price <= budget; 
+
+            const isMatch = t.price <= budget;
             const marker = L.marker([t.lat, t.lng], {
                 icon: L.divIcon({
                     html: `<div class="w-7 h-7 rounded-full flex items-center justify-center text-sm shadow-xl border-2 transition-transform transform hover:scale-110
@@ -4754,7 +4749,7 @@ window.updateCommercesVisibility = renderActiveLayers;
 window.updateLoisirsVisibility = renderActiveLayers;
 window.updateMairiesVisibility = renderActiveLayers;
 
-window.toggleGroup = function(groupId, isChecked) {
+window.toggleGroup = function (groupId, isChecked) {
     const parent = document.getElementById(`group-${groupId}`);
     if (parent) parent.classList.remove('partial');
 
@@ -4763,10 +4758,10 @@ window.toggleGroup = function(groupId, isChecked) {
         sub.checked = isChecked;
     });
     // Trigger map update
-    if (groupId === 'mobilite') { 
-        window.updateStationsVisibility(); 
-        window.updatePathsVisibility(); 
-        if (window.updateVIFVisibility) window.updateVIFVisibility(); 
+    if (groupId === 'mobilite') {
+        window.updateStationsVisibility();
+        window.updatePathsVisibility();
+        if (window.updateVIFVisibility) window.updateVIFVisibility();
     }
     else if (groupId === 'commerces' || groupId === 'sorties') window.updateCommercesVisibility();
     else if (groupId === 'sante') { window.updateCommercesVisibility(); window.updatePediatresVisibility(); }
@@ -4777,32 +4772,32 @@ window.toggleGroup = function(groupId, isChecked) {
         window.updateLoisirsVisibility();
         window.renderActiveLayers();
     }
-    else if (groupId === 'maps') { 
-        window.updateNoiseVisibility(); 
-        window.updateQPVVisibility(); 
-        window.updateZSPVisibility(); 
+    else if (groupId === 'maps') {
+        window.updateNoiseVisibility();
+        window.updateQPVVisibility();
+        window.updateZSPVisibility();
         if (window.updatePEBVisibility) window.updatePEBVisibility();
         if (window.updateEspacesVertsVisibility) window.updateEspacesVertsVisibility();
         if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
         if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
-        if (window.toggleSatelliteView) window.toggleSatelliteView(isChecked); 
+        if (window.toggleSatelliteView) window.toggleSatelliteView(isChecked);
     }
 };
 
-window.updateChildState = function(groupId) {
+window.updateChildState = function (groupId) {
     const parent = document.getElementById(`group-${groupId}`);
     const subs = document.querySelectorAll(`.sub-${groupId}`);
     if (!parent || subs.length === 0) return;
-    
+
     let allChecked = true;
     let someChecked = false;
     subs.forEach(sub => {
         if (sub.checked) someChecked = true;
         else allChecked = false;
     });
-    
+
     parent.checked = allChecked; // The parent is only checked if ALL children are checked
-    
+
     if (someChecked && !allChecked) {
         parent.classList.add('partial');
     } else {
@@ -4989,7 +4984,7 @@ function buildSearchIndex(geojsonData) {
         const code = String(props.code || props.CODE || f.id || "");
         if (!code) return;
         const commune = getCommuneName(props, code);
-        
+
         const addToCommune = (cName) => {
             if (!communeMap[cName]) {
                 communeMap[cName] = {
@@ -4999,7 +4994,7 @@ function buildSearchIndex(geojsonData) {
                 };
             }
             communeMap[cName].codes.push(code);
-            
+
             // Robustly extract all coordinates to compute bounds
             const getPoints = (coords) => {
                 let pts = [];
@@ -5030,7 +5025,7 @@ function buildSearchIndex(geojsonData) {
                 addToCommune(`Paris ${suffix}`);
             }
         }
-        
+
         irisList.push({
             name: name,
             code: code,
@@ -5061,7 +5056,7 @@ window.handleSearch = (val) => {
     const clearBtn = document.getElementById('clear-search');
     if (val) clearBtn.classList.remove('hidden');
     else clearBtn.classList.add('hidden');
-    
+
     updateTopMatches();
 };
 
@@ -5166,10 +5161,10 @@ function getQuartierBadges(props) {
                 "Grande Avenue": "🛍️",
                 "Cœur de Ville": "🏙️"
             };
-            badges.push({ 
-                icon: personaIcons[p.persona] || '🏙️', 
-                text: p.persona, 
-                color: personaColors[p.persona] || personaColors["Cœur de Ville"] 
+            badges.push({
+                icon: personaIcons[p.persona] || '🏙️',
+                text: p.persona,
+                color: personaColors[p.persona] || personaColors["Cœur de Ville"]
             });
         }
     }
@@ -5180,7 +5175,7 @@ function getQuartierBadges(props) {
         const targetName = walkMeta.targetName || "";
         let centerIcon = '🏢';
         let centerColor = 'bg-slate-50 text-slate-700';
-        
+
         if (targetName.includes('Cœur Historique')) {
             centerIcon = '🏰';
             centerColor = 'bg-amber-50 text-amber-700';
@@ -5192,16 +5187,16 @@ function getQuartierBadges(props) {
             centerColor = 'bg-blue-50 text-blue-700';
         }
 
-        badges.push({ 
-            icon: '🚶', 
-            text: `${window.lastWalkingDuration} min centre`, 
-            color: window.lastWalkingDuration < 10 ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700' 
+        badges.push({
+            icon: '🚶',
+            text: `${window.lastWalkingDuration} min centre`,
+            color: window.lastWalkingDuration < 10 ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
         });
-        
-        badges.push({ 
-            icon: centerIcon, 
-            text: targetName.split('-')[0].trim(), 
-            color: centerColor 
+
+        badges.push({
+            icon: centerIcon,
+            text: targetName.split('-')[0].trim(),
+            color: centerColor
         });
     }
 
@@ -5233,7 +5228,7 @@ let osmPathsLayer = null;
 
 window.updateEspacesVertsVisibility = async () => {
     const show = document.getElementById('show-espaces-verts')?.checked || false;
-    
+
     if (show) {
         if (!espacesVertsData) {
             try {
@@ -5255,9 +5250,9 @@ window.updateEspacesVertsVisibility = async () => {
         if (!window.espacesVertsLayer && espacesVertsData) {
             window.espacesVertsLayer = L.geoJSON(espacesVertsData, {
                 style: {
-                    fillColor: '#059669', 
+                    fillColor: '#059669',
                     fillOpacity: 0.4,
-                    color: '#064e3b',    
+                    color: '#064e3b',
                     weight: 0.5,
                     opacity: 0.8
                 },
@@ -5265,7 +5260,7 @@ window.updateEspacesVertsVisibility = async () => {
                 interactive: false
             });
         }
-        
+
         if (window.espacesVertsLayer && !map.hasLayer(window.espacesVertsLayer)) {
             window.espacesVertsLayer.addTo(map);
         }
@@ -5279,7 +5274,7 @@ window.updateEspacesVertsVisibility = async () => {
 window.updateOSMContextVisibility = async () => {
     const show = document.getElementById('show-osm-context')?.checked || false;
     const zoom = map.getZoom();
-    
+
     if (show) {
         // Performance guard: only load/show at zoom >= 13
         if (zoom < 13) {
@@ -5303,7 +5298,7 @@ window.updateOSMContextVisibility = async () => {
 
         if (!window.osmContextLayer && window.osmContextData) {
             window.osmContextLayer = L.geoJSON(window.osmContextData, {
-                style: function(feature) {
+                style: function (feature) {
                     if (feature.properties.natural === 'tree_row') {
                         return {
                             color: '#166534',
@@ -5326,7 +5321,7 @@ window.updateOSMContextVisibility = async () => {
                 interactive: false
             });
         }
-        
+
         if (window.osmContextLayer && !map.hasLayer(window.osmContextLayer)) {
             window.osmContextLayer.addTo(map);
         }
@@ -5356,27 +5351,27 @@ window.updatePathsVisibility = async () => {
                     // Cycling style (main focus of the new dataset)
                     if (p.ad || p.ag || p.highway === 'cycleway') {
                         const isProtected = (p.ad && p.ad.includes('piste')) || (p.ag && p.ag.includes('piste'));
-                        return { 
-                            color: isProtected ? '#059669' : '#10b981', 
-                            weight: isProtected ? 3 : 2, 
-                            opacity: 0.8, 
-                            lineCap: 'round', 
-                            lineJoin: 'round' 
-                        };
-                    }
-                    
-                    // Fallback for pedestrian/hiking if present in the data
-                    const isHiking = p.network === 'GR' || p.category === 'hiking';
-                    if (isHiking) {
-                        return { 
-                            color: p.network === 'GR' ? '#ef4444' : '#f59e0b', 
-                            weight: 3, 
-                            opacity: 0.9,
-                            lineCap: 'round', 
+                        return {
+                            color: isProtected ? '#059669' : '#10b981',
+                            weight: isProtected ? 3 : 2,
+                            opacity: 0.8,
+                            lineCap: 'round',
                             lineJoin: 'round'
                         };
                     }
-                    
+
+                    // Fallback for pedestrian/hiking if present in the data
+                    const isHiking = p.network === 'GR' || p.category === 'hiking';
+                    if (isHiking) {
+                        return {
+                            color: p.network === 'GR' ? '#ef4444' : '#f59e0b',
+                            weight: 3,
+                            opacity: 0.9,
+                            lineCap: 'round',
+                            lineJoin: 'round'
+                        };
+                    }
+
                     // Pedestrian
                     return { color: '#8b5cf6', weight: 1.5, opacity: 0.8, dashArray: '6, 6', lineCap: 'round', lineJoin: 'round' };
                 },
@@ -5387,7 +5382,7 @@ window.updatePathsVisibility = async () => {
                     else if (p.ad && p.ad.includes('bande')) typeLabel = '🚲 Bande Cyclable';
                     else if (p.ad && p.ad.includes('voie verte')) typeLabel = '🌳 Voie Verte';
                     else if (p.highway === 'footway' || p.highway === 'pedestrian') typeLabel = '🚶 Chemin Piéton';
-                    
+
                     let info = `<div class="p-2">
                         <span class="text-[9px] text-gray-400 font-black uppercase tracking-tighter">${typeLabel}</span>
                         <br/><b>${p.nom_voie || p.name || 'Chemin'}</b>`;
@@ -5454,20 +5449,20 @@ window.updateVIFVisibility = async () => {
                         dashArray = '6, 10';
                     }
 
-                    return { 
-                        color, 
-                        weight, 
-                        opacity: 0.9, 
+                    return {
+                        color,
+                        weight,
+                        opacity: 0.9,
                         dashArray,
-                        lineCap: 'round', 
-                        lineJoin: 'round' 
+                        lineCap: 'round',
+                        lineJoin: 'round'
                     };
                 },
                 onEachFeature: (f, layer) => {
                     const p = f.properties;
                     let statusLabel = p.niveau_valid_amenag || 'Pas d\'information';
                     let typeLabel = p.type_amenag || 'Aménagement VIF';
-                    
+
                     let info = `<div class="p-2">
                         <div class="flex items-center gap-2 mb-1">
                             <span class="w-2 h-2 rounded-full" style="background-color: ${layer.options.color}"></span>
@@ -5475,11 +5470,11 @@ window.updateVIFVisibility = async () => {
                         </div>
                         <b class="text-sm">${typeLabel}</b>
                         <br/><span class="text-[10px] text-gray-600">Statut: <b>${statusLabel}</b></span>`;
-                    
+
                     if (p.numero_ligne && !p.numero_ligne.startsWith('<ul')) {
                         info += `<br/><span class="text-[10px] text-blue-600">Ligne: ${p.numero_ligne}</span>`;
                     }
-                    
+
                     info += `</div>`;
                     layer.bindPopup(info);
                 },
@@ -5545,11 +5540,11 @@ function updateTopMatches() {
         const insee = f.properties.code || f.id;
         const matchData = calculateMatchRate(f.properties);
         const score = matchData.total;
-        
+
         if (score >= 0 && !matchData.excluded) {
             let isVisible = true;
             let maxWait = 0;
-            
+
             // Replicate commute and filter logic to only list visible matched IRIS
             if (window.activeWorkplaces && window.activeWorkplaces.length > 0) {
                 for (const wp of window.activeWorkplaces) {
@@ -5598,7 +5593,7 @@ function updateTopMatches() {
     const sortedIris = validIris.sort((a, b) => b.score - a.score);
 
     // Filter by search query if present
-    const filteredIris = window.searchQuery 
+    const filteredIris = window.searchQuery
         ? sortedIris.filter(i => (i.name + " " + i.communeName).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(window.searchQuery))
         : sortedIris;
 
@@ -5647,7 +5642,7 @@ function updateTopMatches() {
             const color = getColor(iris.score);
             const isActive = window.selectedLayer && (window.selectedLayer.feature.properties.code === iris.code || window.selectedLayer.feature.id === iris.code);
             const activeStyles = isActive ? 'border-blue-500 ring-4 ring-blue-500/10 bg-blue-50/50 shadow-md scale-[1.02]' : 'bg-white border-gray-100 hover:border-blue-200 hover:shadow-lg';
-            
+
             return `
                 <div id="iris-card-${iris.code}" 
                      onclick="window.selectNeighborhoodByCode('${iris.code}')" 
@@ -5673,13 +5668,13 @@ function updateTopMatches() {
     }
 }
 
-window.drawCityBoundaries = function(communeName) {
+window.drawCityBoundaries = function (communeName) {
     if (!window.communeHighlightLayer) return;
     window.communeHighlightLayer.clearLayers();
-    
+
     // Find codes from search index or directly from map features
     const communeInfo = window.searchIndex ? window.searchIndex.communes.find(c => c.name === communeName) : null;
-    
+
     if (communeInfo) {
         window.activeCommuneCodes = communeInfo.codes.map(String);
     } else {
@@ -5694,7 +5689,7 @@ window.drawCityBoundaries = function(communeName) {
         }
         window.activeCommuneCodes = Array.from(codes);
     }
-    
+
     window.activeCommuneName = communeName;
 
     // Refresh coloring of all neighborhoods to reflect new active city
@@ -5714,13 +5709,13 @@ window.drawCityBoundaries = function(communeName) {
         try {
             // HYPER-RESILIENT UNION with Gap Bridging
             let merged = null;
-            
+
             // Step 1: Incremental union with tiny buffer to bridge gaps
             cityFeatures.forEach((feature, i) => {
                 try {
                     // Buffer(0.00001) to bridge microscopic topological gaps
                     const buffered = turf.buffer(feature, 0.0001, { units: 'kilometers' });
-                    
+
                     if (!merged) {
                         merged = buffered;
                     } else {
@@ -5776,14 +5771,14 @@ window.drawCityBoundaries = function(communeName) {
     if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
 };
 
-window.selectCity = function(communeName) {
+window.selectCity = function (communeName) {
     if (!window.geojsonLayer) return;
-    
+
     // Clear previous selection immediately to avoid "two neighborhoods selected"
     if (window.deselectFeature) window.deselectFeature();
-    
+
     const communeInfo = window.searchIndex ? window.searchIndex.communes.find(c => c.name === communeName) : null;
-    
+
     const cityFeatures = [];
     let bestFeature = null;
     let maxScore = -1;
@@ -5795,7 +5790,7 @@ window.selectCity = function(communeName) {
         const props = layer.feature.properties;
         const code = String(props.code || layer.feature.id);
         const name = getCommuneName(props, layer.feature.id);
-        
+
         if ((codes.length > 0 && codes.includes(code)) || (name === communeName)) {
             cityFeatures.push(layer);
             const score = calculateMatchRate(props).total;
@@ -5805,7 +5800,7 @@ window.selectCity = function(communeName) {
             }
         }
     });
-    
+
     window.activeCommuneCodes = cityFeatures.map(l => String(l.feature.properties.code || l.feature.id));
     window.activeCommuneName = communeName;
 
@@ -5815,10 +5810,10 @@ window.selectCity = function(communeName) {
     if (cityFeatures.length > 0) {
         // 1. Zoom to city bounds with padding for side panels
         const group = L.featureGroup(cityFeatures);
-        map.fitBounds(group.getBounds(), { 
-            paddingTopLeft: [360, 60], 
-            paddingBottomRight: [360, 60], 
-            maxZoom: 15 
+        map.fitBounds(group.getBounds(), {
+            paddingTopLeft: [360, 60],
+            paddingBottomRight: [360, 60],
+            maxZoom: 15
         });
 
         // 2. Clear old boundaries & update list
@@ -5843,7 +5838,7 @@ window.selectCity = function(communeName) {
     }
 };
 
-window.selectNeighborhoodByCode = function(code) {
+window.selectNeighborhoodByCode = function (code) {
     if (!geojsonLayer) return;
     geojsonLayer.eachLayer(layer => {
         if (layer.feature.properties.code === code) {
@@ -5855,14 +5850,14 @@ window.selectNeighborhoodByCode = function(code) {
     });
 };
 
-window.openComparison = function() {
+window.openComparison = function () {
     const modal = document.getElementById('comparison-modal');
     const content = document.getElementById('comparison-content');
-    
+
     if (window.topNeighborhoods.length === 0) return;
 
     modal.classList.remove('hidden');
-    
+
     content.innerHTML = window.topNeighborhoods.map(item => {
         const p = item.feature.properties;
         const fin = item.financials || {};
@@ -5954,14 +5949,14 @@ window.openComparison = function() {
     }).join('');
 };
 
-window.closeComparison = function() {
+window.closeComparison = function () {
     document.getElementById('comparison-modal').classList.add('hidden');
 };
 
 window.updateTopMatches = updateTopMatches;
 
 // --- UTILS: SPARKLINE RENDERER ---
-window.renderSparkline = function(data) {
+window.renderSparkline = function (data) {
     if (!data || data.length < 2) return '';
     const min = Math.min(...data);
     const max = Math.max(...data);
@@ -5973,11 +5968,11 @@ window.renderSparkline = function(data) {
         <div class="flex flex-col gap-1 my-2">
             <div class="flex justify-between items-end">
                 <span class="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Évolution 5 ans</span>
-                <span class="text-[9px] font-black text-blue-600">+${Math.round((data[data.length-1]/data[0] - 1)*100)}%</span>
+                <span class="text-[9px] font-black text-blue-600">+${Math.round((data[data.length - 1] / data[0] - 1) * 100)}%</span>
             </div>
             <svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" class="overflow-visible mt-1">
                 <path d="M ${points}" fill="none" stroke="currentColor" class="text-blue-500" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-                <circle cx="${width}" cy="${height - ((data[data.length-1] - min) / range) * height}" r="3" class="fill-blue-600" />
+                <circle cx="${width}" cy="${height - ((data[data.length - 1] - min) / range) * height}" r="3" class="fill-blue-600" />
             </svg>
             <div class="flex justify-between text-[7px] text-gray-300 font-bold mt-1">
                 <span>2020</span>
@@ -5987,28 +5982,28 @@ window.renderSparkline = function(data) {
     `;
 };
 
-window.renderHistoricalTrend = function(houseData, aptData) {
+window.renderHistoricalTrend = function (houseData, aptData) {
     if ((!houseData || houseData.length < 2) && (!aptData || aptData.length < 2)) return '';
-    
+
     const allData = [...(houseData || []), ...(aptData || [])].filter(v => v !== null && !isNaN(v));
     if (allData.length === 0) return '';
-    
+
     const min = Math.min(...allData);
     const max = Math.max(...allData);
     const range = (max - min) || 1;
     const width = 280;
     const height = 80;
-    
+
     const getPoints = (data) => {
         if (!data || data.length < 2) return '';
         return data.map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * height}`).join(' ');
     };
-    
+
     const housePoints = getPoints(houseData);
     const aptPoints = getPoints(aptData);
-    
-    const houseTrend = houseData ? Math.round((houseData[houseData.length-1]/houseData[0] - 1)*100) : 0;
-    const aptTrend = aptData ? Math.round((aptData[aptData.length-1]/aptData[0] - 1)*100) : 0;
+
+    const houseTrend = houseData ? Math.round((houseData[houseData.length - 1] / houseData[0] - 1) * 100) : 0;
+    const aptTrend = aptData ? Math.round((aptData[aptData.length - 1] / aptData[0] - 1) * 100) : 0;
 
     return `
         <div class="flex flex-col gap-3 my-2 p-3 bg-white/40 backdrop-blur-md rounded-xl border border-white/50 shadow-xs">
@@ -6043,7 +6038,7 @@ window.renderHistoricalTrend = function(houseData, aptData) {
 
                     <!-- Grid Lines -->
                     <line x1="0" y1="0" x2="${width}" y2="0" stroke="#f1f5f9" stroke-width="1" />
-                    <line x1="0" y1="${height/2}" x2="${width}" y2="${height/2}" stroke="#f1f5f9" stroke-width="1" />
+                    <line x1="0" y1="${height / 2}" x2="${width}" y2="${height / 2}" stroke="#f1f5f9" stroke-width="1" />
                     <line x1="0" y1="${height}" x2="${width}" y2="${height}" stroke="#f1f5f9" stroke-width="1" />
                     
                     ${housePoints ? `
@@ -6064,4 +6059,57 @@ window.renderHistoricalTrend = function(houseData, aptData) {
             </div>
         </div>
     `;
+};
+
+window.prebuiltMarkers = {};
+
+window.buildAllMarkersOnce = function () {
+    if (!window.pointsByInsee) return;
+
+    console.time("Création des marqueurs Leaflet en mémoire");
+
+    Object.entries(window.pointsByInsee).forEach(([insee, points]) => {
+        window.prebuiltMarkers[insee] = {
+            stations: [], schools: [], commerces: [],
+            amenities: [], sport: [], culture: [],
+            marche: [], pediatres: [], mairies: [], riviera: []
+        };
+
+        const createAndStore = (key, featureList, pointToLayerFn) => {
+            if (!featureList) return;
+            featureList.forEach(f => {
+                const latlng = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
+
+                // Exclusion spécifique pour les gares (lignes du GPE gérées ailleurs)
+                if (key === 'stations') {
+                    const line = (f.properties.indice_lig || "").toString();
+                    if (['15', '16', '17', '18'].includes(line)) return;
+                }
+
+                const marker = pointToLayerFn(f, latlng);
+                if (marker) {
+                    // On attache les propriétés utiles directement au marqueur pour filtrer super vite plus tard
+                    marker._featureCategory = (f.properties.category || '').toLowerCase();
+                    marker._featureType = (f.properties.type || '').toLowerCase();
+                    marker._isBio = f.properties.is_biocoop || f.properties.is_naturalia || (f.properties.name || '').toLowerCase().includes('bio');
+                    marker._isPicard = f.properties.is_picard || (f.properties.name || '').toLowerCase().includes('picard');
+
+                    window.prebuiltMarkers[insee][key].push(marker);
+                }
+            });
+        };
+
+        createAndStore('stations', points.stations, window.stationPointToLayer);
+        createAndStore('schools', points.schools, window.schoolPointToLayer);
+        createAndStore('commerces', points.commerces, window.commercePointToLayer);
+        createAndStore('amenities', points.amenities, window.amenityPointToLayer);
+        createAndStore('sport', points.sport, window.amenityPointToLayer);
+        createAndStore('culture', points.culture, window.amenityPointToLayer);
+        createAndStore('marche', points.marche, window.marchePointToLayer);
+        createAndStore('riviera', points.riviera, window.rivieraPointToLayer);
+        // Les pédiatres et mairies ont une structure légèrement différente dans votre code actuel,
+        // mais le principe reste le même si vous les avez dans pointsByInsee.
+    });
+
+    console.timeEnd("Création des marqueurs Leaflet en mémoire");
 };
