@@ -1473,17 +1473,36 @@ window.updateContextualMap = function (categoryId) {
             Object.values(mappings).forEach(mapGroup => {
                 for (const id in mapGroup) {
                     const el = document.getElementById(id);
-                    if (el) el.checked = false;
+                    if (el) {
+                        el.checked = false;
+                        if (id.startsWith('group-')) {
+                            const gid = id.replace('group-', '');
+                            document.querySelectorAll(`.sub-${gid}`).forEach(s => s.checked = false);
+                        }
+                    }
                 }
             });
 
             // B. Cocher uniquement ce qui concerne la catégorie cliquée
             for (const [id, state] of Object.entries(config)) {
                 const el = document.getElementById(id);
-                if (el) el.checked = state;
+                if (el) {
+                    el.checked = state;
+                    if (id.startsWith('group-')) {
+                        const gid = id.replace('group-', '');
+                        document.querySelectorAll(`.sub-${gid}`).forEach(s => s.checked = state);
+                    } else {
+                        // Si c'est un sous-élément, on met à jour l'état du parent
+                        const subClass = Array.from(el.classList).find(c => c.startsWith('sub-'));
+                        if (subClass) {
+                            const gid = subClass.replace('sub-', '');
+                            if (window.updateChildState) window.updateChildState(gid);
+                        }
+                    }
+                }
             }
 
-            // C. Lancer TOUTES les mises à jour cartographiques (Finis les "//")
+            // C. Lancer TOUTES les mises à jour cartographiques
             requestAnimationFrame(() => {
                 if (window.renderActiveLayers) window.renderActiveLayers();
                 if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
@@ -1494,6 +1513,9 @@ window.updateContextualMap = function (categoryId) {
                 if (window.updateEspacesVertsVisibility) window.updateEspacesVertsVisibility();
                 if (window.updateNoiseVisibility) window.updateNoiseVisibility();
                 if (window.updatePathsVisibility) window.updatePathsVisibility();
+                
+                // D. Mettre à jour les trajets (Critique pour la visibilité immédiate)
+                if (window.highlightAllWalkingPaths) window.highlightAllWalkingPaths(true);
             });
         }
     }, 100);
@@ -1744,7 +1766,9 @@ function renderCategoryDetails(id, props, cat, matchData) {
                     <div class="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-2">Stations à proximité</div>
                     ${nearby.map(s => {
                     return `
-                        <div class="bg-white p-2 rounded-xl border border-gray-100 flex items-center justify-between shadow-xs">
+                        <div onmouseover="window.highlightPathByName('${s.name}')" 
+                             onmouseout="window.highlightPathByName(null)"
+                             class="bg-white p-2 rounded-xl border border-gray-100 flex items-center justify-between shadow-xs hover:border-blue-300 transition-all cursor-pointer">
                             <div class="flex flex-col">
                                 <span class="text-[10px] font-black text-gray-800 leading-tight mb-1">${s.name}</span>
                                 <div class="flex items-center gap-1">
@@ -1775,7 +1799,9 @@ function renderCategoryDetails(id, props, cat, matchData) {
                         </div>
                         <div class="space-y-2">
                             ${nearGPE.map(s => `
-                                <div class="bg-emerald-50/20 p-2 rounded-xl border border-emerald-100/50 flex items-center justify-between">
+                                <div onmouseover="window.highlightPathByName('${s.name}')" 
+                                     onmouseout="window.highlightPathByName(null)"
+                                     class="bg-emerald-50/20 p-2 rounded-xl border border-emerald-100/50 flex items-center justify-between hover:border-emerald-300 transition-all cursor-pointer">
                                     <div class="flex flex-col">
                                         <div class="flex items-center gap-1.5 mb-1">
                                             <span class="text-[10px] font-black text-emerald-900 leading-none">${s.name}</span>
