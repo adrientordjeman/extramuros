@@ -1448,120 +1448,54 @@ window.highlightPathByName = function (name) {
 };
 
 window.updateContextualMap = function (categoryId) {
-    // 1. Define category to layer mappings
     const mappings = {
-        'immo': {
-            checks: { 'show-transactions': true },
-            pills: ['pill-group-immo', 'pill-group-maps']
-        },
-        'mobility': {
-            checks: { 'group-mobilite': true },
-            pills: ['pill-group-mobility']
-        },
-        'commute': {
-            checks: {}, // Special handling for walk paths
-            pills: ['pill-group-mobility']
-        },
-        'urbanisme': {
-            checks: { 'show-espaces-verts': true, 'show-osm-context': true },
-            pills: ['pill-group-maps']
-        },
-        'vieQuartier': {
-            checks: { 'group-commerces': true, 'group-sorties': true, 'group-sante': true, 'show-centre-ville': true },
-            pills: ['pill-group-commerces', 'pill-group-sorties', 'pill-group-sante', 'pill-group-maps']
-        },
-        'infra': {
-            checks: { 'group-infra': true },
-            pills: ['pill-group-infra']
-        },
-        'education': {
-            checks: { 'show-schools': true },
-            pills: ['pill-group-infra']
-        },
-        'safety': {
-            checks: { 'show-qpv': true, 'show-zsp': true },
-            pills: ['pill-group-maps']
-        }
+        'immo': { checks: { 'show-transactions': true }, pills: ['pill-group-immo', 'pill-group-maps'] },
+        'mobility': { checks: { 'group-mobilite': true }, pills: ['pill-group-mobility'] },
+        'commute': { checks: {}, pills: ['pill-group-mobility'] },
+        'urbanisme': { checks: { 'show-espaces-verts': true, 'show-osm-context': true }, pills: ['pill-group-maps'] },
+        'vieQuartier': { checks: { 'group-commerces': true, 'group-sorties': true, 'group-sante': true, 'show-centre-ville': true }, pills: ['pill-group-commerces', 'pill-group-sorties', 'pill-group-sante', 'pill-group-maps'] },
+        'infra': { checks: { 'group-infra': true }, pills: ['pill-group-infra'] },
+        'education': { checks: { 'show-schools': true }, pills: ['pill-group-infra'] },
+        'safety': { checks: { 'show-qpv': true, 'show-zsp': true }, pills: ['pill-group-maps'] }
     };
 
     if (categoryId && mappings[categoryId]) {
-        // 1. Reset ALL contextual layers first (Batch mode - no events)
+        // 1. Reset rapide
         Object.keys(mappings).forEach(catId => {
-            const config = mappings[catId];
-            if (config.checks) {
-                Object.keys(config.checks).forEach(id => {
+            if (mappings[catId].checks) {
+                Object.keys(mappings[catId].checks).forEach(id => {
                     const el = document.getElementById(id);
-                    if (el && el.checked) {
-                        el.checked = false;
-                        // Special: Uncheck sub-items if it's a group
-                        if (id.startsWith('group-')) {
-                            const gid = id.replace('group-', '');
-                            document.querySelectorAll(`.sub-${gid}`).forEach(sub => sub.checked = false);
-                        }
-                    }
+                    if (el) el.checked = false;
                 });
             }
         });
 
-        const allowedPills = mappings[categoryId].pills || [];
-        allPillGroups.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                if (allowedPills.includes(id)) el.classList.remove('pill-group-hidden');
-                else el.classList.add('pill-group-hidden');
-            }
-        });
-
-        // 2. Apply new states for current category (Batch mode - no events)
+        // 2. Application du nouveau contexte
         const config = mappings[categoryId];
         if (config.checks) {
             for (const [id, state] of Object.entries(config.checks)) {
                 const el = document.getElementById(id);
-                if (el) {
-                    el.checked = state;
-                    // Special: Check sub-items if it's a group
-                    if (id.startsWith('group-') && state) {
-                        const gid = id.replace('group-', '');
-                        document.querySelectorAll(`.sub-${gid}`).forEach(sub => sub.checked = true);
-                    }
-                }
+                if (el) el.checked = state;
             }
         }
 
-        // 3. Trigger Global Map Updates ONCE
-        window.renderActiveLayers(); // Handles stations, schools, commerces, loisirs, etc.
-        if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
-        if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
-        if (window.updateQPVVisibility) window.updateQPVVisibility();
-        if (window.updateZSPVisibility) window.updateZSPVisibility();
-        if (window.updateEspacesVertsVisibility) window.updateEspacesVertsVisibility();
-        if (window.updateNoiseVisibility) window.updateNoiseVisibility();
-        if (window.updatePathsVisibility) window.updatePathsVisibility();
-        if (window.updatePediatresVisibility) window.updatePediatresVisibility();
-
-        // 4. Special: Walking Paths filtering
-        if (categoryId === 'commute') {
-            window.highlightAllWalkingPaths(true, 'workplace');
-        } else if (categoryId === 'vieQuartier') {
-            window.highlightAllWalkingPaths(true, 'center');
-        } else if (categoryId === 'mobility' || categoryId === 'infra') {
-            window.highlightAllWalkingPaths(true, 'station');
-        } else {
-            window.highlightAllWalkingPaths(false);
-        }
-    } else {
-        // Reset: show all pills
-        allPillGroups.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.classList.remove('pill-group-hidden');
+        // 3. Appels asynchrones NON bloquants
+        // Au lieu de tout bloquer, on lance les updates en parallèle
+        requestAnimationFrame(() => {
+            window.renderActiveLayers();
+            if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
+            if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
+            if (window.updateQPVVisibility) window.updateQPVVisibility();
+            if (window.updateZSPVisibility) window.updateZSPVisibility();
+            if (window.updateEspacesVertsVisibility) window.updateEspacesVertsVisibility();
+            if (window.updateNoiseVisibility) window.updateNoiseVisibility();
+            if (window.updatePathsVisibility) window.updatePathsVisibility();
         });
-        window.highlightAllWalkingPaths(false);
+
     }
 
-    // Refresh IRIS style (for the zoom check)
-    if (window.geojsonLayer) {
-        window.geojsonLayer.setStyle(style);
-    }
+    // Refresh IRIS style 
+    if (window.geojsonLayer) window.geojsonLayer.setStyle(style);
 };
 
 window.toggleAccordion = function (id) {
@@ -4084,60 +4018,38 @@ const getNoiseWeight = (meters, featureWeight) => {
     return (meters * (featureWeight || 0.1)) / metersPerPixel;
 };
 
+let noiseInfraLayerBase = null; // Stockage en mémoire
+
 window.updateNoiseVisibility = async () => {
     const show = document.getElementById('show-noise')?.checked;
-    const zoom = map.getZoom();
-    updateFilters();
 
-    if (!show) {
-        if (noiseInfraLayer) map.removeLayer(noiseInfraLayer);
-        return;
+    // 1. Initialisation (Une seule fois !)
+    if (show && !window._noiseData) {
+        window._noiseData = await fetch('/noise_infra.geojson').then(r => r.json());
     }
 
-    try {
-        if (!window._noiseData) {
-            const response = await fetch('/noise_infra.geojson');
-            window._noiseData = await response.json();
-        }
-
-        if (!noiseInfraLayer) {
-            noiseInfraLayer = L.layerGroup();
-        }
-
-        // FULL RECREATION to force Canvas redraw with new zoom-scaled weights
-        noiseInfraLayer.clearLayers();
+    if (show && !noiseInfraLayerBase) {
+        noiseInfraLayerBase = L.layerGroup();
         const noiseRenderer = L.canvas({ padding: 0.5, pane: 'noisePane' });
 
-        // Calibrated Bruitparif-like thresholds
-        const layersConfig = [
-            { color: '#fde047', meters: 400, opacity: 0.012, minZoom: 14 }, // Distant Hum (400m)
-            { color: '#fb923c', meters: 180, opacity: 0.025, minZoom: 13 }, // Outer Mist (180m)
-            { color: '#ef4444', meters: 70, opacity: 0.05, minZoom: 11 }, // Mid Glow (70m)
-            { color: '#7f1d1d', meters: 15, opacity: 0.25, minZoom: 9 }   // Core (15m)
-        ];
-
-        layersConfig.forEach(cfg => {
-            if (zoom < cfg.minZoom) return;
-
-            const layer = L.geoJSON(window._noiseData, {
-                renderer: noiseRenderer,
-                style: (f) => ({
-                    color: cfg.color,
-                    weight: getNoiseWeight(cfg.meters, f.properties.weight),
-                    opacity: cfg.opacity,
-                    lineCap: 'round',
-                    lineJoin: 'round'
-                }),
-                interactive: false
-            });
-            noiseInfraLayer.addLayer(layer);
+        // On dessine le bruit une fois pour toutes
+        const layer = L.geoJSON(window._noiseData, {
+            renderer: noiseRenderer,
+            style: (f) => ({
+                color: f.properties.weight > 5 ? '#ef4444' : '#fb923c', // Rouge si fort, Orange si faible
+                weight: f.properties.weight * 1.5,
+                opacity: 0.4
+            }),
+            interactive: false
         });
+        noiseInfraLayerBase.addLayer(layer);
+    }
 
-        if (!map.hasLayer(noiseInfraLayer)) {
-            noiseInfraLayer.addTo(map);
-        }
-    } catch (e) {
-        console.error("Noise Visibility Error:", e);
+    // 2. Affichage instantané
+    if (show && noiseInfraLayerBase && !window.map.hasLayer(noiseInfraLayerBase)) {
+        window.map.addLayer(noiseInfraLayerBase);
+    } else if (!show && noiseInfraLayerBase && window.map.hasLayer(noiseInfraLayerBase)) {
+        window.map.removeLayer(noiseInfraLayerBase);
     }
 };
 
