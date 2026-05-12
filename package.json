@@ -1,0 +1,18 @@
+{
+  "name": "quartier_ideal",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "mapshaper": "^0.7.3",
+    "vite": "^8.0.10"
+  },
+  "dependencies": {
+    "@turf/turf": "^7.3.5"
+  }
+}

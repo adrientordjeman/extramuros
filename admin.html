@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Data Sources Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="./style.css" />
+    <style>
+        /* Custom scrollbar for raw data preview */
+        .preview-scroll::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .preview-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        .preview-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .preview-scroll::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        /* JSON Tree syntax highlighting */
+        .json-key { color: #0284c7; font-weight: 600; }
+        .json-string { color: #16a34a; }
+        .json-number { color: #ea580c; }
+        .json-boolean { color: #9333ea; font-weight: bold; }
+        .json-null { color: #94a3b8; font-style: italic; }
+
+        #map-preview { height: 300px; border-radius: 12px; margin-bottom: 1rem; }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen overflow-hidden flex flex-col text-slate-800">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10 shrink-0">
+        <div class="flex items-center gap-4">
+            <h1 class="text-xl font-bold text-slate-900 tracking-tight">Data Sources Admin</h1>
+            <span class="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-widest border border-blue-100">Extra-muros</span>
+        </div>
+        <a href="/" class="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+            Retour à l'app
+        </a>
+    </header>
+
+    <!-- Main Content Layout -->
+    <div class="flex flex-1 overflow-hidden">
+        
+        <!-- Sidebar: Source List -->
+        <aside class="w-80 bg-white border-r border-gray-200 flex flex-col h-full shrink-0">
+            <div class="p-4 border-b border-gray-100 bg-gray-50/50">
+                <input type="text" id="source-search" placeholder="Filtrer les sources..." class="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all shadow-sm">
+            </div>
+            <div id="sources-list" class="flex-1 overflow-y-auto p-3 space-y-4">
+                <!-- Populated by JS -->
+            </div>
+        </aside>
+
+        <!-- Main Area: Preview Window -->
+        <main class="flex-1 flex flex-col bg-slate-50 h-full overflow-hidden relative">
+            
+            <!-- Default State -->
+            <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                <svg class="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+                <p class="text-sm font-medium">Sélectionnez une source pour prévisualiser les données</p>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading-state" class="hidden absolute inset-0 bg-slate-50/80 backdrop-blur-sm flex flex-col items-center justify-center text-slate-500 z-50">
+                <div class="w-8 h-8 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-3"></div>
+                <p class="text-xs font-bold uppercase tracking-widest">Chargement...</p>
+            </div>
+
+            <!-- Content State -->
+            <div id="content-state" class="hidden flex-col h-full overflow-hidden">
+                <!-- Meta Header -->
+                <div class="bg-white border-b border-gray-200 p-4 shrink-0 flex items-center justify-between">
+                    <div>
+                        <h2 id="preview-title" class="text-lg font-bold text-slate-900 leading-tight">filename.json</h2>
+                        <p id="preview-path" class="text-xs text-slate-500 font-mono mt-0.5">/public/filename.json</p>
+                    </div>
+                    <div class="flex gap-2 items-center">
+                        <span id="preview-size" class="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-1 rounded">-- KB</span>
+                        <span id="preview-type" class="text-xs font-bold uppercase tracking-wider bg-blue-100 text-blue-700 px-2 py-1 rounded">JSON</span>
+                    </div>
+                </div>
+
+                <!-- Main Scrollable Area -->
+                <div class="flex-1 overflow-y-auto p-6 space-y-6">
+                    
+                    <!-- Metadata Section -->
+                    <div id="metadata-section" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Métadonnées</h3>
+                            <div class="space-y-2">
+                                <div class="flex justify-between text-xs">
+                                    <span class="text-slate-500">Source / Editeur:</span>
+                                    <span id="meta-publisher" class="font-bold text-slate-700">--</span>
+                                </div>
+                                <div class="flex justify-between text-xs">
+                                    <span class="text-slate-500">Fréquence:</span>
+                                    <span id="meta-frequency" class="text-slate-700">--</span>
+                                </div>
+                                <div class="flex justify-between text-xs">
+                                    <span class="text-slate-500">Description:</span>
+                                    <span id="meta-description" class="text-slate-700 text-right max-w-[200px]">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Utilisation dans le Code</h3>
+                            <div id="usage-list" class="space-y-1 max-h-[80px] overflow-y-auto pr-2 custom-vibe-scroll">
+                                <!-- Usage items -->
+                                <div class="text-[10px] text-slate-400 italic">Recherche en cours...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Map Preview Section (GeoJSON only) -->
+                    <div id="map-section" class="hidden">
+                        <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Aperçu Carte</h3>
+                        <div id="map-preview"></div>
+                    </div>
+
+                    <!-- Raw Data Preview -->
+                    <div class="flex flex-col h-[500px]">
+                        <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Aperçu des Données (100 premiers items)</h3>
+                        <div id="preview-container" class="flex-1 overflow-auto preview-scroll bg-slate-50 rounded-xl border border-slate-200 p-4 text-sm font-mono whitespace-pre text-slate-700">
+                            <!-- Data injected here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- External PapaParse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="./admin.js"></script>
+</body>
+</html>

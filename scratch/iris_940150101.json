@@ -1,0 +1,298 @@
+{
+  "commerces": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.51705,
+          48.8425725
+        ]
+      },
+      "properties": {
+        "name": "Artisan Boulanger",
+        "category": "boulangerie",
+        "emoji": "\ud83e\udd56",
+        "address": "IDF"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5128911,
+          48.8425484
+        ]
+      },
+      "properties": {
+        "name": "Amore Mio",
+        "category": "restaurant",
+        "emoji": "\ud83c\udf74",
+        "address": "98 Quai Victor Berri\u00e8re"
+      }
+    }
+  ],
+  "stations": [],
+  "schools": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.517417088629667,
+          48.844083077297405
+        ]
+      },
+      "properties": {
+        "uai": "0941490J",
+        "name": "Ecole maternelle Etienne de Silhouette",
+        "type": "maternelle",
+        "nature": "ECOLE MATERNELLE",
+        "sector": "Public",
+        "city": "Bry-sur-Marne",
+        "ips": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.518890577775743,
+          48.84786266866428
+        ]
+      },
+      "properties": {
+        "uai": "0942388K",
+        "name": "Ecole priv\u00e9e Haya Mouchka Bry",
+        "type": "elementaire",
+        "nature": "ECOLE DE NIVEAU ELEMENTAIRE",
+        "sector": "Priv\u00e9",
+        "city": "Bry-sur-Marne",
+        "ips": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5178574676465626,
+          48.844201768121096
+        ]
+      },
+      "properties": {
+        "uai": "0942432H",
+        "name": "Ecole \u00e9l\u00e9mentaire priv\u00e9e Pilote Arborescences",
+        "type": "elementaire",
+        "nature": "ECOLE DE NIVEAU ELEMENTAIRE",
+        "sector": "Priv\u00e9",
+        "city": "Bry-sur-Marne",
+        "ips": null
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.516135122045487,
+          48.844939474112
+        ]
+      },
+      "properties": {
+        "uai": "0940188U",
+        "name": "Ecole \u00e9l\u00e9mentaire Etienne de Silhouette",
+        "type": "elementaire",
+        "nature": "ECOLE DE NIVEAU ELEMENTAIRE",
+        "sector": "Public",
+        "city": "Bry-sur-Marne",
+        "ips": 141.8
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5178574676465626,
+          48.844201768121096
+        ]
+      },
+      "properties": {
+        "uai": "0942433J",
+        "name": "Coll\u00e8ge priv\u00e9 Pilote Arborescences",
+        "type": "college",
+        "nature": "COLLEGE",
+        "sector": "Priv\u00e9",
+        "city": "Bry-sur-Marne",
+        "ips": null
+      }
+    }
+  ],
+  "amenities": [
+    {
+      "type": "Feature",
+      "id": 25325552,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.522895,
+          48.8484833
+        ]
+      },
+      "properties": {
+        "name": "Sans nom",
+        "category": "tennis",
+        "type": "pitch",
+        "operator": null,
+        "operator_type": "public"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 25325557,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5226542,
+          48.8484248
+        ]
+      },
+      "properties": {
+        "name": "Sans nom",
+        "category": "tennis",
+        "type": "pitch",
+        "operator": null,
+        "operator_type": "public"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 25325568,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5231117,
+          48.8485535
+        ]
+      },
+      "properties": {
+        "name": "Sans nom",
+        "category": "tennis",
+        "type": "pitch",
+        "operator": null,
+        "operator_type": "public"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 25325582,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5229405,
+          48.848046
+        ]
+      },
+      "properties": {
+        "name": "Sans nom",
+        "category": "tennis",
+        "type": "pitch",
+        "operator": null,
+        "operator_type": "public"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 25325589,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.523365,
+          48.8477338
+        ]
+      },
+      "properties": {
+        "name": "Sans nom",
+        "category": "tennis",
+        "type": "pitch",
+        "operator": null,
+        "operator_type": "public"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 25325591,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5235867,
+          48.8478078
+        ]
+      },
+      "properties": {
+        "name": "Sans nom",
+        "category": "tennis",
+        "type": "pitch",
+        "operator": null,
+        "operator_type": "public"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 883240911,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5218565,
+          48.8482788
+        ]
+      },
+      "properties": {
+        "name": "Sans nom",
+        "category": "tennis",
+        "type": "pitch",
+        "operator": null,
+        "operator_type": "public"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 883240912,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5233384,
+          48.8481623
+        ]
+      },
+      "properties": {
+        "name": "Sans nom",
+        "category": "tennis",
+        "type": "pitch",
+        "operator": null,
+        "operator_type": "public"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 883260048,
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          2.5225549,
+          48.8481353
+        ]
+      },
+      "properties": {
+        "name": "Tennis Club de Bry",
+        "category": "tennis",
+        "type": "sports_centre",
+        "operator": null,
+        "operator_type": "public"
+      }
+    }
+  ]
+}

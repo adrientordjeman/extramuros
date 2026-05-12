@@ -1,0 +1,25 @@
+{
+  "Vieux Bourg": [
+    "Sceaux", "Vincennes", "Saint-Germain-en-Laye", "Versailles", "Rueil-Malmaison",
+    "Saint-Cloud", "Fontainebleau", "Enghien-les-Bains", "Le Raincy", "Joinville-le-Pont",
+    "Maisons-Laffitte", "Saint-Mandé", "Charenton-le-Pont", "Nogent-sur-Marne",
+    "Boulogne-Billancourt", "Issy-les-Moulineaux", "Levallois-Perret", "Neuilly-sur-Seine",
+    "Courbevoie", "Puteaux", "Suresnes", "Meudon", "Vanves", "Malakoff", "Montrouge",
+    "Asnières-sur-Seine", "La Garenne-Colombes", "Bois-Colombes", "Colombes",
+    "L'Isle-Adam", "Senlis", "Compiègne", "Rambouillet", "Étampes", "Provins",
+    "Meaux", "Melun", "Corbeil-Essonnes", "Évry", "Mantes-la-Jolie", "Poissy",
+    "Conflans-Sainte-Honorine", "Franconville", "Ermont", "Eaubonne", "Montmorency"
+  ],
+  "Hub de gare": [
+    "Massy", "Val de Fontenay", "Noisy-le-Grand", "Cergy-Préfecture", "Marne-la-Vallée Chessy",
+    "Bourg-la-Reine", "Antony", "Juvisy-sur-Orge", "Aulnay-sous-Bois", "Saint-Denis",
+    "Argenteuil", "Sartrouville", "Chelles", "Bondy", "Le Blanc-Mesnil", "Bobigny",
+    "Pantin", "Les Lilas", "Bagnolet", "Montreuil", "Vincennes", "Saint-Maur-des-Fossés",
+    "Créteil", "Vitry-sur-Seine", "Ivry-sur-Seine", "Villejuif", "Le Kremlin-Bicêtre",
+    "Arcueil", "Cachan", "Bagneux", "Fontenay-aux-Roses", "Châtillon", "Clamart"
+  ],
+  "Grande Avenue": [
+    "Grande Armée", "Charles de Gaulle", "Victor Hugo", "Jean Jaurès", "République",
+    "Aristide Briand", "Maréchal Leclerc", "Général de Gaulle", "Avenue de Paris"
+  ]
+}
