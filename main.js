@@ -43,6 +43,17 @@ const idfmColors = {
     "T9": { bg: "#92B82F", text: "#FFFFFF" }
 };
 
+window.HUBS_COORDS = {
+    'bastille': { name: 'Bastille, Paris', lat: 48.8532, lon: 2.3688, color: '#2563eb', icon: '🏢' },
+    'saint-lazare': { name: 'Saint-Lazare, Paris', lat: 48.8752, lon: 2.3267, color: '#2563eb', icon: '🏢' },
+    'montparnasse': { name: 'Montparnasse, Paris', lat: 48.8412, lon: 2.3200, color: '#2563eb', icon: '🏢' },
+    'la-defense': { name: 'La Défense, Puteaux', lat: 48.8919, lon: 2.2381, color: '#2563eb', icon: '🏢' },
+    'saclay': { name: 'Plateau de Saclay', lat: 48.7118, lon: 2.1623, color: '#2563eb', icon: '🏢' },
+    'saint-denis': { name: 'Saint-Denis Pleyel', lat: 48.9205, lon: 2.3444, color: '#2563eb', icon: '🏢' },
+    'bibliotheque': { name: 'Bibliothèque F. Mitterrand, Paris', lat: 48.8299, lon: 2.3768, color: '#2563eb', icon: '🏢' },
+    'la-plaine': { name: 'La Plaine Saint-Denis, St-Denis', lat: 48.9066, lon: 2.3556, color: '#2563eb', icon: '🏢' }
+};
+
 const CATEGORY_SOURCES = {
     "immo": [
         { icon: "🌍", title: "DVF - Etalab", year: "2024", desc: "Données de Valeur Foncière (Ministère des Finances)" },
@@ -220,20 +231,29 @@ function buildIrisGrid() {
 }
 
 window.layersByCommune = {};
-function getNearbyPoints(insee, maxDistance = 800) {
+function getNearbyPoints(inseeOrCoords, maxDistance = 800) {
     const results = { commerces: [], amenities: [], schools: [], stations: [], sport: [], culture: [], marche: [], riviera: [] };
-    if (!window.pointsByInsee || !window.irisCentroids) return results;
+    if (!window.pointsByInsee) return results;
     if (!window.irisGrid) buildIrisGrid();
 
-    const center = window.irisCentroids[insee];
+    let center;
+    if (typeof inseeOrCoords === 'string') {
+        center = window.irisCentroids?.[inseeOrCoords];
+    } else {
+        center = inseeOrCoords;
+    }
+    
     if (!center) return results;
 
     // Use the spatial grid to check only nearby IRIS cells
     const gx = Math.floor(center.lon * 50);
     const gy = Math.floor(center.lat * 50);
     const codesToCheck = [];
-    for (let x = gx - 1; x <= gx + 1; x++) {
-        for (let y = gy - 1; y <= gy + 1; y++) {
+    
+    // Increase grid search for larger radii (2km+)
+    const gridOffset = Math.max(1, Math.ceil(maxDistance / 2000));
+    for (let x = gx - gridOffset; x <= gx + gridOffset; x++) {
+        for (let y = gy - gridOffset; y <= gy + gridOffset; y++) {
             const cell = window.irisGrid[`${x},${y}`];
             if (cell) codesToCheck.push(...cell);
         }
@@ -248,11 +268,14 @@ function getNearbyPoints(insee, maxDistance = 800) {
                 node[key].forEach(f => {
                     if (!f?.geometry?.coordinates) return;
                     const [pLon, pLat] = f.geometry.coordinates;
-                    if (Math.abs(pLat - center.lat) < 0.01 && Math.abs(pLon - center.lon) < 0.015) {
+                    const latDiff = maxDistance / 110000;
+                    const lonDiff = maxDistance / 70000;
+                    if (Math.abs(pLat - center.lat) < latDiff && Math.abs(pLon - center.lon) < lonDiff) {
                         if (getDistance(center.lat, center.lon, pLat, pLon) <= maxDistance) {
                             // Exclude OSM sport categories to avoid duplicates with official gouv database
                             const sportCats = ['tennis', 'gym', 'pool'];
                             if (key === 'amenities' && sportCats.includes(f.properties?.category)) return;
+                            f.irisCode = code; // Attach IRIS code for commune-based filtering
                             results[key].push(f);
                         }
                     }
@@ -290,6 +313,159 @@ function getNearbyPoints(insee, maxDistance = 800) {
     return results;
 }
 
+/**
+ * Highlights all nearby commerces/amenities of a specific type on the map.
+ * Used when hovering over category pills in the sidebar.
+ */
+window.highlightCommerceOnMap = function(type, emoji, label) {
+    if (!window.map || !window.commerceHighlightLayer) return;
+    
+    // Clear previous highlights
+    window.commerceHighlightLayer.clearLayers();
+    if (!type) return;
+
+    const props = window.selectedLayer?.feature?.properties;
+    if (!props) return;
+
+    // Use a larger radius (3km) to help users find the nearest alternative
+    const points = getNearbyPoints(props.code, 3000);
+    const allPoints = [
+        ...(points.commerces || []),
+        ...(points.amenities || []),
+        ...(points.culture || []),
+        ...(points.marche || []),
+        ...(points.schools || []),
+        ...(points.sport || [])
+    ];
+
+    const filtered = allPoints.filter(p => {
+        const cat = (p.properties?.category || "").toLowerCase();
+        const name = (p.properties?.name || "").toLowerCase();
+        
+        // Check if point is inside a "pole" (city center polygon)
+        if (window.cityCentersData && typeof turf !== 'undefined') {
+            const point = turf.point(p.geometry.coordinates);
+            const inPole = window.cityCentersData.features.some(f => turf.booleanPointInPolygon(point, f));
+            if (inPole) return false;
+        }
+
+        if (type === 'bio') return cat === 'bio' || cat.includes('biologique') || name.includes('naturalia') || name.includes('biocoop') || name.includes('la vie claire');
+        if (type === 'boulangerie') return cat === 'boulangerie' || cat === 'bakery' || name.includes('boulangerie') || name.includes('fournil');
+        if (type === 'boucherie') return cat === 'boucherie' || cat === 'butcher' || cat === 'charcuterie' || name.includes('boucherie');
+        if (type === 'fromagerie') return cat === 'fromagerie' || cat === 'cheese' || name.includes('fromagerie') || name.includes('crèmerie');
+        if (type === 'cinema') return cat === 'cinema' || cat === 'movie_theater';
+        if (type === 'theatre') return cat === 'theatre' || cat === 'theater';
+        if (type === 'concert') return cat === 'concert_hall' || cat === 'music_venue' || cat === 'performance_venue';
+        if (type === 'restaurant') return cat === 'restaurant' || cat === 'cafe' || cat === 'fast_food';
+        if (type === 'pediatre') return cat === 'pediatre' || name.includes('pédiatre');
+        if (type === 'marche') return cat === 'marche' || cat === 'marketplace';
+        if (type === 'school') return cat.includes('école') || cat.includes('maternelle') || cat.includes('élémentaire') || cat.includes('primaire') || cat.includes('school');
+        if (type === 'maternelle') return cat.includes('maternelle');
+        if (type === 'elementaire') return cat.includes('élémentaire') || cat.includes('primaire');
+        if (type === 'college') return cat.includes('collège');
+        if (type === 'lycee') return cat.includes('lycée');
+        if (type === 'bibliotheque') return cat.includes('bibliothèque') || cat === 'library';
+        if (type === 'museum') return cat.includes('musée') || cat === 'museum';
+
+        return cat === type || name.includes(type);
+    });
+
+    if (filtered.length === 0) return;
+
+    filtered.forEach(p => {
+        const coords = p.geometry.coordinates;
+        const latlng = [coords[1], coords[0]];
+        
+        const marker = L.marker(latlng, {
+            icon: L.divIcon({
+                className: 'commerce-highlight-icon',
+                html: `
+                    <div class="commerce-marker-wrapper">
+                        <div class="commerce-marker-pulse"></div>
+                        <div class="commerce-marker-pill">
+                            <span class="commerce-marker-emoji">${emoji}</span>
+                        </div>
+                    </div>
+                `,
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            }),
+            zIndexOffset: 1000
+        }).addTo(window.commerceHighlightLayer);
+
+        if (p.properties.name) {
+            marker.bindTooltip(`
+                <div class="px-2 py-1 font-black text-[10px] uppercase tracking-tight">
+                    ${p.properties.name}
+                </div>
+            `, { direction: 'top', offset: [0, -10], className: 'commerce-tooltip' });
+        }
+    });
+    
+    // Optional: Auto-zoom if points are far away? 
+    // For now just show them.
+};
+
+/**
+ * Robustly counts nearby amenities of all types for a given INSEE or coordinate.
+ * Used to provide real-time accuracy over precomputed data.
+ */
+window.countNearbyAmenities = function(inseeOrCoords, maxDistance = 1000) {
+    const node = getNearbyPoints(inseeOrCoords, maxDistance);
+    const commerces = node.commerces || [];
+    const amenities = node.amenities || [];
+    const culture = node.culture || [];
+    
+    const counts = {
+        boulangerie: 0, boucherie: 0, fromagerie: 0, bio: 0,
+        supermarket: 0, pharmacie: 0, poste: 0, marche: 0,
+        restaurants: 0, fast_food: 0, bars: 0,
+        cinemas: 0, theatres: 0, concerts: 0,
+        pediatres: 0, schools: node.schools?.length || 0,
+        gym: 0, pool: 0, tennis: 0, shopping: 0,
+        picard: 0, deli: 0
+    };
+
+    const filterByPole = (p) => {
+        if (!window.cityCentersData || typeof turf === 'undefined') return true;
+        const point = turf.point(p.geometry.coordinates);
+        return !window.cityCentersData.features.some(f => turf.booleanPointInPolygon(point, f));
+    };
+
+    commerces.filter(filterByPole).forEach(c => {
+        const cat = (c.properties?.category || "").toLowerCase();
+        const name = (c.properties?.name || "").toLowerCase();
+        
+        if (cat === 'boulangerie' || cat === 'bakery' || name.includes('boulangerie')) counts.boulangerie++;
+        if (cat === 'boucherie' || cat === 'butcher' || cat === 'charcuterie' || name.includes('boucherie')) counts.boucherie++;
+        if (cat === 'fromagerie' || cat === 'cheese' || name.includes('fromagerie')) counts.fromagerie++;
+        if (cat === 'bio' || cat.includes('biologique') || name.includes('naturalia') || name.includes('biocoop') || name.includes('la vie claire')) counts.bio++;
+        if (cat === 'supermarket' || cat === 'supermarché' || cat === 'convenience' || name.includes('supermarché') || name.includes('monoprix') || name.includes('franprix')) counts.supermarket++;
+        if (cat === 'restaurant') counts.restaurants++;
+        if (cat === 'fast_food') counts.fast_food++;
+        if (cat === 'bar' || cat === 'pub' || cat === 'cafe') counts.bars++;
+        if (cat === 'clothes' || cat === 'shoes' || cat === 'department_store') counts.shopping++;
+        if (name.includes('picard')) counts.picard++;
+        if (cat === 'deli' || name.includes('traiteur')) counts.deli++;
+    });
+    
+    amenities.filter(filterByPole).forEach(a => {
+        const cat = (a.properties?.category || "").toLowerCase();
+        if (cat === 'pharmacy' || cat === 'pharmacie') counts.pharmacie++;
+        if (cat === 'post_office' || cat === 'poste') counts.poste++;
+        if (cat === 'marketplace' || cat === 'marche') counts.marche++;
+    });
+
+    culture.filter(filterByPole).forEach(c => {
+        const cat = (c.properties?.category || "").toLowerCase();
+        if (cat === 'cinema' || cat === 'movie_theater') counts.cinemas++;
+        if (cat === 'theatre' || cat === 'theater') counts.theatres++;
+        if (cat === 'concert_hall' || cat === 'music_venue') counts.concerts++;
+    });
+
+    return counts;
+};
+
 function getDistance(lat1, lon1, lat2, lon2) {
     const R = 6371e3;
     const f1 = lat1 * Math.PI / 180, f2 = lat2 * Math.PI / 180;
@@ -299,8 +475,8 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
 
-window.currentPropertyType = 'house';
-let selectedLayer = null;
+window.currentPropertyType = 'apt';
+window.selectedLayer = null;
 let lastView = null;
 let centroidMarker = null;
 window.pebLayer = null;
@@ -327,37 +503,90 @@ function decodePolyline(str, precision = 6) {
 }
 
 window.updateWalkingPath = async function (props) {
+    const irisName = props.nom_iris || props.nom_com || props.name || "Quartier inconnu";
+    window.currentUpdateIrisCode = props.code;
+    const thisUpdateIrisCode = props.code;
+
+    console.log(`[DEBUG] updateWalkingPath for ${irisName} (${props.code})`);
+    if (!window.precomputedJourneysRaw) {
+        console.warn("[DEBUG] precomputedJourneysRaw is NOT LOADED YET!");
+    } else {
+        console.log(`[DEBUG] precomputedJourneysRaw has ${Object.keys(window.precomputedJourneysRaw).length} keys.`);
+    }
+
     if (!window.walkingPathsGroup) {
         window.walkingPathsGroup = L.layerGroup().addTo(window.map);
     }
     window.walkingPathsGroup.clearLayers();
-    window.activeWalkingPaths = []; // Store paths for sidebar
+    window.activeWalkingPaths = []; 
+
+    // AGGRESSIVELY CLEAR ALL STATIC LAYERS TO AVOID OVERLAP
+    if (window.centreVilleLayer) window.centreVilleLayer.clearLayers();
+    if (window.stationsLayer) window.stationsLayer.clearLayers();
+    if (window.schoolsLayer) window.schoolsLayer.clearLayers();
+    if (window.mairiesLayer) window.mairiesLayer.clearLayers();
+    if (window.amenitiesLayer) window.amenitiesLayer.clearLayers();
+    if (window.commercesLayer) window.commercesLayer.clearLayers();
 
     window.lastWalkingDuration = null;
     window.lastWalkingTarget = null;
 
-    const startLat = props.lat;
-    const startLon = props.lon;
+    let startLat = props.lat;
+    let startLon = props.lon;
+
+    if (!startLat || !startLon) {
+        console.log("[DEBUG] Missing lat/lon in props, trying irisCentroids cache...");
+        const cachedCentroid = window.irisCentroids?.[props.code];
+        if (cachedCentroid) {
+            startLat = cachedCentroid.lat;
+            startLon = cachedCentroid.lon;
+        } else if (window.selectedLayer) {
+            const center = window.selectedLayer.getBounds().getCenter();
+            startLat = center.lat;
+            startLon = center.lng;
+            console.log(`[DEBUG] Found center from selectedLayer: ${startLat}, ${startLon}`);
+        } else {
+            console.warn("[DEBUG] No start coordinates found and no selectedLayer!");
+            return;
+        }
+    }
     const targets = [];
 
     const lineStations = {};
     const closestCenters = {};
 
-    // 1. All City Centers within 2.5km (deduplicated by name)
+    // 1. All City Centers within 4km (Increased radius)
     (window.cityCentersData?.features || []).forEach(f => {
         const centroid = turf.centroid(f).geometry.coordinates;
         const dist = getDistance(startLat, startLon, centroid[1], centroid[0]);
-        if (dist <= 2500) {
-            const name = f.properties.name;
-            if (!closestCenters[name] || dist < closestCenters[name].dist) {
-                closestCenters[name] = {
+        if (dist <= 4000) {
+            const props = f.properties || {};
+            const name = props.name || props.NOM || "Centre";
+            const id = props.id || props.code || `${name}-${centroid[1]}-${centroid[0]}`;
+            
+            if (!closestCenters[id] || dist < closestCenters[id].dist) {
+                // Get nearby commerce presence for this center
+                const localPoints = getNearbyPoints({ lat: centroid[1], lon: centroid[0] }, 500);
+                const am = {
+                    bio: localPoints.commerces.some(c => c.properties.category === 'bio'),
+                    bakery: localPoints.commerces.some(c => (c.properties.category || '').match(/bakery|boulangerie/i)),
+                    supermarket: localPoints.commerces.some(c => (c.properties.category || '').match(/supermarket|supermarché|alimentation|epicerie/i)),
+                    pharmacy: localPoints.amenities.some(c => c.properties.category === 'pharmacy'),
+                    bank: localPoints.amenities.some(c => c.properties.category === 'bank'),
+                    culture: localPoints.culture.length > 0 || localPoints.amenities.some(c => (c.properties.category || '').match(/cinema|theater|museum|theatre/i)),
+                    restaurant: localPoints.amenities.some(c => (c.properties.category || '').match(/restaurant|cafe|bar/i)) || localPoints.commerces.some(c => (c.properties.category || '').match(/restau/i))
+                };
+
+                closestCenters[id] = {
+                    id: id,
                     name,
                     lat: centroid[1],
                     lon: centroid[0],
                     dist,
                     type: 'center',
                     color: name.includes('Historique') ? '#b45309' : '#2563eb',
-                    icon: '📍'
+                    icon: '📍',
+                    amenities: am
                 };
             }
         }
@@ -382,6 +611,7 @@ window.updateWalkingPath = async function (props) {
                     if (idfm) transitColor = idfm.bg;
 
                     lineStations[lineId] = {
+                        id: `station-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
                         name: s.name,
                         lat: s.lat,
                         lon: s.lon,
@@ -407,17 +637,76 @@ window.updateWalkingPath = async function (props) {
 
     targets.push(...Object.values(uniqueStationWinners));
 
-    const activeWorkplaces = window.activeWorkplaces || [];
-    const hubs = {
-        'bastille': { name: 'Bastille, Paris', lat: 48.8532, lon: 2.3688, color: '#2563eb', icon: '🏢' },
-        'saint-lazare': { name: 'Saint-Lazare, Paris', lat: 48.8752, lon: 2.3267, color: '#2563eb', icon: '🏢' },
-        'montparnasse': { name: 'Montparnasse, Paris', lat: 48.8412, lon: 2.3200, color: '#2563eb', icon: '🏢' },
-        'la-defense': { name: 'La Défense, Puteaux', lat: 48.8919, lon: 2.2381, color: '#2563eb', icon: '🏢' },
-        'saclay': { name: 'Plateau de Saclay', lat: 48.7118, lon: 2.1623, color: '#2563eb', icon: '🏢' },
-        'saint-denis': { name: 'Saint-Denis Pleyel', lat: 48.9205, lon: 2.3444, color: '#2563eb', icon: '🏢' },
-        'bibliotheque': { name: 'Bibliothèque F. Mitterrand, Paris', lat: 48.8299, lon: 2.3768, color: '#2563eb', icon: '🏢' },
-        'la-plaine': { name: 'La Plaine Saint-Denis, St-Denis', lat: 48.9066, lon: 2.3556, color: '#2563eb', icon: '🏢' }
-    };
+    // 3. Schools (Custom filtering logic)
+    const irisCode = props.code || "";
+    const communeCode = irisCode.substring(0, 5);
+    
+    // Large radius search to capture all city schools and neighboring lycées
+    const schoolPoints = getNearbyPoints(props.code, 10000).schools || [];
+    schoolPoints.forEach(f => {
+        const coords = f.geometry.coordinates;
+        if (!coords) return;
+        const [lon, lat] = coords;
+        const dist = getDistance(startLat, startLon, lat, lon);
+        
+        const cat = (f.properties?.category || f.properties?.type || "").toLowerCase();
+        const nameStr = (f.properties?.name || f.properties?.nom_etablissement || "").toLowerCase();
+        const isPrivate = (f.properties?.sector || "").toLowerCase().includes('privé');
+        const isPublic = !isPrivate;
+        const schoolCommuneCode = (f.irisCode || "").substring(0, 5);
+        const schoolCityName = (f.properties?.nom_com || f.properties?.commune || "").toLowerCase();
+        const targetCityName = (props.nom_com || props.commune || "").toLowerCase();
+
+        const isLycee = cat.includes('lycée') || cat.includes('lycee') || nameStr.includes('lycée') || nameStr.includes('lycee');
+        const isCollege = cat.includes('collège') || cat.includes('college') || nameStr.includes('collège') || nameStr.includes('college');
+        const isPrimary = cat.includes('maternelle') || cat.includes('élémentaire') || cat.includes('elementaire') || cat.includes('primaire') || nameStr.includes('maternelle') || nameStr.includes('élémentaire');
+
+        let shouldInclude = false;
+        let color = '#9333ea';
+        let icon = '🏫';
+
+        const isSameCity = (schoolCommuneCode === communeCode) || (targetCityName && schoolCityName && targetCityName === schoolCityName);
+
+        if (isLycee) {
+            // Lycées: same city or bordering cities (approx < 7km)
+            if (isSameCity || dist <= 7000) {
+                shouldInclude = true;
+                color = '#10b981';
+                icon = '🎓';
+            }
+        } else if (isPublic) {
+            // Public Maternelle/Elém/Collège: same city ONLY (or very close fallback)
+            if (isSameCity || dist <= 1500) {
+                shouldInclude = true;
+                if (isCollege) { color = '#3b82f6'; icon = '📚'; }
+                else if (cat.includes('maternelle')) { color = '#ec4899'; icon = '👶'; }
+            }
+        } else if (isPrivate) {
+            // Private Schools: 3.5km radius
+            if (dist <= 3500) {
+                shouldInclude = true;
+                if (isCollege) { color = '#3b82f6'; icon = '📚'; }
+                else if (cat.includes('maternelle')) { color = '#ec4899'; icon = '👶'; }
+            }
+        }
+
+        if (shouldInclude) {
+            targets.push({
+                id: `school-${f.properties.id || f.id || Math.random().toString(36).substr(2, 9)}`,
+                name: f.properties.name || "École",
+                lat: lat,
+                lon: lon,
+                dist,
+                type: 'school',
+                isPrivate: isPrivate,
+                color: color,
+                icon: icon,
+                ips: f.properties.ips || 0
+            });
+        }
+    });
+
+    const hubs = window.HUBS_COORDS || {};
 
     activeWorkplaces.forEach(wp => {
         const config = hubs[wp.id];
@@ -434,34 +723,82 @@ window.updateWalkingPath = async function (props) {
         }
     });
 
-    // Sort by distance and limit to top 8 total (expanded for variety)
-    targets.sort((a, b) => (a.dist || 0) - (b.dist || 0));
-    const topTargets = targets.slice(0, 10);
+    // Final filter: remove schools if in Vie de Quartier category
+    const finalTargets = targets.filter(t => {
+        if (window.activeAccordion === 'vieQuartier' && t.type === 'school') return false;
+        return true;
+    });
 
-    const labelPositions = []; // To avoid overlap
-    console.log(`[DEBUG] updateWalkingPath for ${props.name}, activeAccordion: ${window.activeAccordion}`);
+    finalTargets.sort((a, b) => (a.dist || 0) - (b.dist || 0));
+    const topTargets = finalTargets.slice(0, 80); 
 
+    const labelPositions = []; 
+    const activeAccordion = window.activeAccordion;
+    
     for (const [idx, target] of topTargets.entries()) {
         try {
             let sections = [];
             let duration = 0;
             let tripLength = 0;
-            const startLat = props.lat;
-            const startLon = props.lon;
+            // USE the resolved startLat/startLon from outer scope, DO NOT shadow them!
 
             // Try cache first
-            const cached = window.precomputedJourneysRaw?.[props.code]?.[target.id];
+            const rawCache = window.precomputedJourneysRaw?.[props.code]?.[target.id];
+            const preferredKey = window.commuteItineraryType || 'main';
+            const cached = (rawCache && rawCache[preferredKey]) ? rawCache[preferredKey] : ((rawCache && rawCache.main) ? rawCache.main : rawCache);
 
-            if (cached && cached.sections) {
-                sections = cached.sections;
+            if (cached) {
+                console.log(`[DEBUG] Polyline Cache HIT for ${props.code} -> ${target.id}`, {
+                    sections: cached.sections?.length,
+                    hasLegacyShape: !!cached.shape
+                });
+            } else {
+                console.log(`[DEBUG] Polyline Cache MISS for ${props.code} -> ${target.id}`);
+            }
+
+            if (cached && (cached.sections || cached.itinerary)) {
+                // Sanitize: strip null coords from every section
+                const rawSections = (cached.sections || cached.itinerary).map(sec => ({
+                    ...sec,
+                    shape: (sec.shape || []).filter(p => p && p[0] !== null && p[1] !== null && typeof p[0] === 'number' && typeof p[1] === 'number')
+                }));
+
+                // For empty walking/street_network sections, inject straight-line bridges
+                sections = rawSections.map((sec, i) => {
+                    if (sec.shape && sec.shape.length > 0) return sec; // already valid, keep as-is
+                    if (sec.type !== 'walking' && sec.type !== 'street_network') return null; // non-walking with no shape → drop
+
+                    // Find the anchor points to bridge
+                    let bridgeStart = null;
+                    let bridgeEnd = null;
+
+                    // Start of bridge: end of previous section, or IRIS centroid
+                    for (let j = i - 1; j >= 0; j--) {
+                        const prev = rawSections[j];
+                        if (prev && prev.shape && prev.shape.length > 0) { bridgeStart = prev.shape[prev.shape.length - 1]; break; }
+                    }
+                    if (!bridgeStart) bridgeStart = [startLat, startLon];
+
+                    // End of bridge: start of next section, or target destination
+                    for (let j = i + 1; j < rawSections.length; j++) {
+                        const next = rawSections[j];
+                        if (next && next.shape && next.shape.length > 0) { bridgeEnd = next.shape[0]; break; }
+                    }
+                    if (!bridgeEnd) bridgeEnd = [target.lat, target.lon];
+
+                    return { ...sec, shape: [bridgeStart, bridgeEnd] };
+                }).filter(Boolean);
+
                 duration = cached.duration;
             } else if (cached && cached.shape && !cached.itinerary) {
                 // Backwards compatibility for single-shape cache (only if no itinerary to guide us)
                 const type = target.type === 'workplace' ? 'transit' : 'walking';
                 sections = [{ type, shape: cached.shape.filter(p => p && p[0] !== null && p[1] !== null), color: target.color }];
                 duration = cached.duration;
+                console.log(`[DEBUG] Using legacy shape for ${target.id}`);
             } else {
                 if (target.type === 'workplace') {
+                    console.log(`[DEBUG] Fetching IDFM itinerary for workplace: ${target.name}`);
                     const url = `https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/journeys?from=${startLon};${startLat}&to=${target.lon};${target.lat}&data_freshness=base_schedule`;
                     const response = await fetch(url, { headers: { 'apikey': '41Yg0ZQ1MuGlIHfwEXrY0vGFhjQKngcv' } });
                     const data = await response.json();
@@ -469,15 +806,28 @@ window.updateWalkingPath = async function (props) {
                     if (data.journeys && data.journeys.length > 0) {
                         const j = data.journeys[0];
                         duration = Math.round(j.duration / 60);
-                        j.sections.forEach(s => {
+                        console.log(`[DEBUG] Received ${j.sections.length} sections from IDFM`);
+                        j.sections.forEach((s, sIdx) => {
                             let sectionShape = [];
-                            if (s.path) {
-                                sectionShape = s.path.filter(p => p.lat !== null && p.lng !== null).map(p => [p.lat, p.lng]);
-                            } else if (s.type === 'street_network' && s.geojson) {
-                                sectionShape = s.geojson.coordinates.filter(c => c[0] !== null && c[1] !== null).map(c => [c[1], c[0]]);
+                            let source = "none";
+
+                            // L'API Navitia/IDFM met toujours le tracé dans "geojson", quel que soit le mode de transport !
+                            if (s.geojson && s.geojson.coordinates) {
+                                source = "geojson";
+                                sectionShape = s.geojson.coordinates
+                                    .filter(c => c && c.length >= 2 && c[0] !== null && c[1] !== null)
+                                    .map(c => [c[1], c[0]]); // On inverse [Longitude, Latitude] vers [Latitude, Longitude] pour Leaflet
+                            }
+                            // Fallback de sécurité au cas où l'API utilise 'path'
+                            else if (s.path && Array.isArray(s.path)) {
+                                source = "path";
+                                sectionShape = s.path
+                                    .filter(p => p && p.lat !== undefined && p.lng !== undefined)
+                                    .map(p => [p.lat, p.lng]);
                             }
 
                             if (sectionShape.length > 0) {
+                                console.log(`  - Section ${sIdx} (${s.type}): Found ${sectionShape.length} points via ${source}`);
                                 let type = s.type;
                                 let color = '#94a3b8';
                                 let code = '';
@@ -491,6 +841,7 @@ window.updateWalkingPath = async function (props) {
                                     else if (mode.includes('bus') || net.includes('bus')) type = 'bus';
                                     else if (mode.includes('tram') || net.includes('tram')) type = 'tram';
                                     else if (mode.includes('train') || mode.includes('rail') || net.includes('sncf')) type = 'train';
+                                    else type = 'public_transport'; // Unclassified transit — still a transit leg
                                 }
                                 sections.push({
                                     type,
@@ -503,15 +854,25 @@ window.updateWalkingPath = async function (props) {
                         });
                     }
                 } else {
-                    // Walking only for centers and stations
-                    const response = await fetch(`https://valhalla1.openstreetmap.de/route?json={"locations":[{"lat":${startLat},"lon":${startLon}},{"lat":${target.lat},"lon":${target.lon}}],"costing":"pedestrian"}`);
-                    const data = await response.json();
-                    if (data.trip && data.trip.legs) {
-                        const shape = data.trip.legs[0].shape;
-                        const coords = decodePolyline(shape);
-                        sections = [{ type: 'walking', shape: coords, color: '#94a3b8', duration: Math.round(data.trip.summary.time / 60) }];
-                        duration = Math.round(data.trip.summary.time / 60);
-                        tripLength = Math.round(data.trip.summary.length * 1000);
+                    // Walking path calculation
+                    // Fallback to estimation for many targets to avoid API throttling
+                    const useEstimation = (target.type === 'school' && idx >= 12);
+                    
+                    if (useEstimation) {
+                        const estimatedDist = dist * 1.35; // 1.35 average urban detour factor
+                        duration = Math.round((estimatedDist / 1.33) / 60); // 1.33 m/s (approx 4.8 km/h)
+                        tripLength = Math.round(estimatedDist);
+                        sections = [{ type: 'walking', shape: [[startLat, startLon], [target.lat, target.lon]], color: '#94a3b8', duration: duration }];
+                    } else {
+                        const response = await fetch(`https://valhalla1.openstreetmap.de/route?json={"locations":[{"lat":${startLat},"lon":${startLon}},{"lat":${target.lat},"lon":${target.lon}}],"costing":"pedestrian"}`);
+                        const data = await response.json();
+                        if (data.trip && data.trip.legs) {
+                            const shape = data.trip.legs[0].shape;
+                            const coords = decodePolyline(shape);
+                            sections = [{ type: 'walking', shape: coords, color: '#94a3b8', duration: Math.round(data.trip.summary.time / 60) }];
+                            duration = Math.round(data.trip.summary.time / 60);
+                            tripLength = Math.round(data.trip.summary.length * 1000);
+                        }
                     }
                 }
             }
@@ -521,32 +882,122 @@ window.updateWalkingPath = async function (props) {
                 const pathPolylines = [];
                 const pathMarkers = [];
 
+                const showSchoolsPill = document.getElementById('show-schools')?.checked || document.getElementById('group-infra')?.checked;
                 const shouldBeVisible = (window.activeAccordion === 'commute' && target.type === 'workplace') ||
-                    (window.activeAccordion === 'vieQuartier' && target.type === 'center');
+                    (window.activeAccordion === 'vieQuartier' && (target.type === 'center' || target.type === 'school')) ||
+                    (target.type === 'school' && showSchoolsPill);
 
                 // On force l'opacité à 0 pour les stations en mode mobilité (le Hover s'occupera de l'afficher)
                 const isMobilityOrInfraMode = (window.activeAccordion === 'mobility' || window.activeAccordion === 'infra');
-                const initialOpacity = (isMobilityOrInfraMode && target.type === 'station') ? 0 : (shouldBeVisible ? 0.8 : 0);
+                const initialOpacity = (isMobilityOrInfraMode && target.type === 'station') ? 0 : (shouldBeVisible ? 1 : 0);
+
+                console.log(`[DEBUG] Rendering path for ${target.name} (${target.type}). Visible: ${shouldBeVisible}, Initial Opacity: ${initialOpacity}`);
 
                 sections.forEach((sec, sIdx) => {
-                    const isTransit = ['rer', 'metro', 'bus', 'train', 'tram'].includes(sec.type);
+                    const isTransit = ['rer', 'metro', 'bus', 'train', 'tram', 'transit', 'public_transport', 'on_demand_transport'].includes(sec.type);
+                    if (!sec.shape || sec.shape.length === 0) {
+                        console.warn(`[DEBUG] Section ${sIdx} (${sec.type}) has NO SHAPE DATA!`);
+                        return;
+                    }
+                    // Robust coordinate check — skip sections with coordinates outside France
+                    const isInvalid = sec.shape.some(p => p[0] < 40 || p[0] > 52 || p[1] < -5 || p[1] > 10);
+                    if (isInvalid) {
+                        console.error(`[DEBUG] CRITICAL: Section ${sIdx} has coordinates OUTSIDE FRANCE!`, sec.shape[0]);
+                        return; // Skip rendering this section entirely
+                    }
+
+                    if (window.currentUpdateIrisCode !== thisUpdateIrisCode) return;
+
+                    // SNAP: Ensure the path starts EXACTLY at the iris centroid (human icon)
+                    if (sIdx === 0 && sec.shape.length > 0) {
+                        const firstPoint = sec.shape[0];
+                        const d = getDistance(startLat, startLon, firstPoint[0], firstPoint[1]);
+                        if (d < 500) { // If within 500m, snap it to the icon center
+                            sec.shape[0] = [startLat, startLon];
+                        }
+                    }
+
+                    // --- Per-leg styling ---
+                    const lineColor = sec.color || '#94a3b8';
+                    // Get official text color if available via code lookup
+                    const idfmEntry = sec.code ? idfmColors[sec.code] : null;
+                    const badgeTextColor = idfmEntry ? idfmEntry.text : '#ffffff';
+
+                    let polyWeight, polyDash, polyOpacity;
+                    if (isTransit) {
+                        polyWeight = 5;
+                        polyDash = null;
+                        polyOpacity = shouldBeVisible ? 1 : 0;
+                    } else if (sec.type === 'transfer') {
+                        polyWeight = 2;
+                        polyDash = '2, 5';
+                        polyOpacity = shouldBeVisible ? 0.6 : 0;
+                    } else {
+                        // walking / street_network
+                        polyWeight = 2;
+                        polyDash = '5, 8';
+                        polyOpacity = shouldBeVisible ? 0.75 : 0;
+                    }
+
+                    // For transit legs: draw a white outline beneath for visual separation
+                    if (isTransit) {
+                        const outlinePoly = L.polyline(sec.shape, {
+                            color: '#ffffff',
+                            weight: polyWeight + 3,
+                            opacity: shouldBeVisible ? 0.85 : 0,
+                            lineCap: 'round',
+                            lineJoin: 'round',
+                            pane: 'walkingPathsPane',
+                            interactive: false
+                        }).addTo(window.walkingPathsGroup);
+                        outlinePoly._isOutline = true;
+                        outlinePoly._outlineOpacity = 0.85;
+                        pathPolylines.push(outlinePoly); // track so it toggles with the path
+                    }
+
                     const poly = L.polyline(sec.shape, {
-                        color: sec.color || target.color,
-                        weight: isTransit ? 6 : 5,
-                        dashArray: isTransit ? 'none' : '3, 10',
-                        opacity: initialOpacity,
+                        color: lineColor,
+                        weight: polyWeight,
+                        dashArray: polyDash,
+                        opacity: polyOpacity,
+                        lineCap: 'round',
                         lineJoin: 'round',
                         pane: 'walkingPathsPane',
                         className: `walking-path ${pathId} sec-${sIdx}`,
                         interactive: false
                     }).addTo(window.walkingPathsGroup);
+
+                    // Store the original weight on the polyline for later highlight toggling
+                    poly._originalWeight = polyWeight;
+                    poly._originalOpacity = polyOpacity;
                     pathPolylines.push(poly);
 
-                    // Add icon for transit sections
+                    // Add line badge for transit sections
                     if (isTransit && sec.code) {
                         const midIdx = Math.floor(sec.shape.length / 2);
                         const midPoint = sec.shape[midIdx];
-                        const iconHtml = `<div class="transit-path-icon" style="background: ${sec.color}; border: 1.5px solid white; border-radius: 4px; padding: 2px 4px; color: white; font-size: 8px; font-weight: 900; box-shadow: 0 2px 6px rgba(0,0,0,0.2); white-space: nowrap; transform: translate(-50%, -50%); opacity: ${shouldBeVisible ? 1 : 0};">${sec.code}</div>`;
+                        const modePrefix = sec.type === 'metro' ? 'M·' : sec.type === 'rer' ? 'RER·' : sec.type === 'tram' ? 'T·' : '';
+                        const badgeBg = idfmEntry ? idfmEntry.bg : lineColor;
+                        const badgeLabel = `${modePrefix}${sec.code}`;
+                        const iconHtml = `<div style="position:relative;width:0;height:0;"><div style="
+                            position: absolute;
+                            left: 50%; top: 50%;
+                            transform: translate(-50%, -50%);
+                            background: ${badgeBg};
+                            color: ${badgeTextColor};
+                            padding: 3px 8px;
+                            border-radius: 20px;
+                            font-size: 9px;
+                            font-weight: 900;
+                            white-space: nowrap;
+                            border: 2px solid white;
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+                            opacity: ${shouldBeVisible ? 1 : 0};
+                            letter-spacing: 0.04em;
+                            pointer-events: none;
+                            line-height: 1;
+                        ">${badgeLabel}</div></div>`;
+                        if (window.currentUpdateIrisCode !== thisUpdateIrisCode) return;
                         const iconMarker = L.marker(midPoint, {
                             icon: L.divIcon({ className: '', html: iconHtml, iconSize: [0, 0] }),
                             interactive: false,
@@ -554,11 +1005,13 @@ window.updateWalkingPath = async function (props) {
                         }).addTo(window.walkingPathsGroup);
                         pathMarkers.push(iconMarker);
                     }
+
                 });
 
                 // Add walking icon at start if walking
                 if (sections[0].type === 'walking' || sections[0].type === 'street_network') {
                     const startPoint = sections[0].shape[0];
+                    if (window.currentUpdateIrisCode !== thisUpdateIrisCode) return;
                     const walkMarker = L.marker(startPoint, {
                         icon: L.divIcon({ className: '', html: `<div class="walk-icon" style="font-size: 14px; opacity: ${shouldBeVisible ? 0.8 : 0}; transform: translate(-50%, -50%);">🚶</div>`, iconSize: [0, 0] }),
                         interactive: false,
@@ -591,18 +1044,60 @@ window.updateWalkingPath = async function (props) {
 
                 const distanceMeters = Math.round(tripLength || getDistance(startLat, startLon, target.lat, target.lon));
 
+                const isInteractive = ['school', 'center', 'station'].includes(target.type);
+                
+                // FORCE HIDE STATIC MARKERS IF INTERACTIVE LABELS ARE ACTIVE
+                if (isInteractive && window.centreVilleLayer) window.centreVilleLayer.clearLayers();
+                if (isInteractive && window.stationsLayer) window.stationsLayer.clearLayers();
+                if (isInteractive && window.schoolsLayer) window.schoolsLayer.clearLayers();
+                const isSchool = target.type === 'school';
+                const isCenter = target.type === 'center';
+                const isStation = target.type === 'station';
+
+                // Extra info logic
+                let extraHtml = '';
+                if (isSchool) {
+                    extraHtml = `<span class="ips-label" style="display: inline-flex; align-items: center; margin-left: 5px; font-size: 9px; opacity: 0.8;"> - IPS: ${target.ips || 'N/A'}</span>
+                                 ${target.isPrivate ? `<span class="private-badge" style="font-size: 8px; background: rgba(255,255,255,0.2); padding: 1px 4px; border-radius: 4px; margin-left: 4px; border: 1px solid rgba(255,255,255,0.4); display: inline-flex;">Privé</span>` : ''}`;
+                } else if (isCenter && target.amenities) {
+                    const am = target.amenities;
+                    const icons = [
+                        { key: 'bio', icon: '🌱' },
+                        { key: 'bakery', icon: '🥖' },
+                        { key: 'supermarket', icon: '🛒' },
+                        { key: 'pharmacy', icon: '💊' },
+                        { key: 'bank', icon: '🏦' },
+                        { key: 'culture', icon: '🎭' },
+                        { key: 'restaurant', icon: '🍴' }
+                    ];
+                    extraHtml = `<div class="amenity-icons" style="display: inline-flex; gap: 3px; margin-left: 5px; align-items: center;">
+                        ${icons.map(i => `<span style="opacity: ${am[i.key] ? 1 : 0.2}; filter: ${am[i.key] ? 'none' : 'grayscale(100%)'}; font-size: 11px; line-height: 1;">${i.icon}</span>`).join('')}
+                    </div>`;
+                } else if (isStation && target.line) {
+                    const line = target.line;
+                    const idfm = idfmColors[line] || { bg: '#666', text: '#fff' };
+                    extraHtml = `<span class="station-line-badge" style="background: ${idfm.bg}; color: ${idfm.text}; padding: 1px 5px; border-radius: 4px; font-size: 8px; margin-left: 5px; border: 1px solid rgba(255,255,255,0.3);">L.${line}</span>`;
+                }
+
                 const labelIcon = L.divIcon({
-                    className: '', // Clear default Leaflet icon styles to prevent clipping
+                    className: '', 
                     html: `<div style="position: relative; overflow: visible; width: 0; height: 0;">
-                             <div class="path-label ${pathId}-label" style="background: ${target.color}; color: white; padding: 5px 14px; border-radius: 20px; font-size: 10px; font-weight: 800; white-space: nowrap; border: 2px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; flex-direction: column; line-height: 1.1; position: absolute; transform: translate(12px, -50%); margin-top: ${yOffset}px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); opacity: ${(shouldBeVisible && map.getZoom() >= 14) ? 1 : 0}; width: fit-content; min-width: max-content; pointer-events: none; overflow: visible !important;">
-                               <span style="font-size: 7px; opacity: 0.9; text-transform: uppercase; font-weight: 900; letter-spacing: 0.05em; margin-bottom: 2px; display: block;">${target.name}</span>
-                               <span style="display: block;">${duration} min <span style="opacity: 0.7; font-weight: 400;">(${distanceMeters}m)</span></span>
+                             <div class="path-label ${pathId}-label ${isInteractive ? 'interactive-path-label' : ''}" 
+                                  style="background: ${target.color}; color: white; position: absolute; transform: translate(12px, -50%); margin-top: ${yOffset}px; opacity: ${(shouldBeVisible && map.getZoom() >= 12) ? 1 : 0}; pointer-events: ${isInteractive ? 'auto' : 'none'}; cursor: ${isInteractive ? 'pointer' : 'default'};">
+                               
+                               <div class="compact-content" style="display: flex; align-items: center; gap: 6px; white-space: nowrap;">
+                                 <span class="type-icon" style="font-size: 13px; line-height: 1;">${target.icon}</span>
+                                 <span class="time-label" style="font-size: 10px; font-weight: 800;">${duration} min</span>
+                                 <span class="full-name" style="display: none; margin-left: 5px; font-size: 11px; font-weight: 700;">${target.name}</span>
+                                 ${isInteractive ? extraHtml : ''}
+                               </div>
                              </div>
                            </div>`,
                     iconSize: [0, 0],
                     iconAnchor: [0, 0]
                 });
 
+                if (window.currentUpdateIrisCode !== thisUpdateIrisCode) return;
                 const marker = L.marker(destPoint, {
                     icon: labelIcon,
                     interactive: false,
@@ -613,7 +1108,13 @@ window.updateWalkingPath = async function (props) {
                 // Actually, we can find it by class once it's rendered, but better to do it lazily in highlightPath or store it here.
                 // Since markers are added to a layerGroup, they might not have an element yet.
 
-                window.activeWalkingPaths.push({
+                // RACE CONDITION CHECK: If another IRIS was selected while we were fetching, STOP.
+                if (window.currentUpdateIrisCode !== thisUpdateIrisCode) {
+                    console.log(`[DEBUG] Aborting updateWalkingPath for ${thisUpdateIrisCode} (new request: ${window.currentUpdateIrisCode})`);
+                    return;
+                }
+
+                const pathObj = {
                     id: pathId,
                     name: target.name,
                     type: target.type,
@@ -624,7 +1125,9 @@ window.updateWalkingPath = async function (props) {
                     polylines: pathPolylines,
                     markers: pathMarkers,
                     destMarker: marker
-                });
+                };
+                console.log(`[DEBUG] Adding path to activeWalkingPaths: ${pathId} (${target.name})`, pathObj);
+                window.activeWalkingPaths.push(pathObj);
 
                 // If it's the primary center, update the info panel
                 if (target.type === 'center' && !window.lastWalkingDuration) {
@@ -644,7 +1147,9 @@ window.updateWalkingPath = async function (props) {
     // Ensure the paths match the current contextual category
     if (window.activeAccordion && window.highlightAllWalkingPaths) {
         if (window.activeAccordion === 'commute') window.highlightAllWalkingPaths(true, 'workplace');
-        else if (window.activeAccordion === 'vieQuartier') window.highlightAllWalkingPaths(true, 'center');
+        else if (window.activeAccordion === 'vieQuartier') {
+            window.highlightAllWalkingPaths(true, ['center']); // Removed school
+        }
         else if (window.activeAccordion === 'mobility' || window.activeAccordion === 'infra') window.highlightAllWalkingPaths(true, 'station');
         else window.highlightAllWalkingPaths(false);
     }
@@ -656,15 +1161,25 @@ window.highlightPath = function (pathId, highlight, pathObj = null) {
     }
     if (!pathObj) return;
 
-    if (highlight) {
+    console.log(`[DEBUG] highlightPath: ${pathId} (${pathObj.name}), highlight: ${highlight}, type: ${pathObj.type}`);
+
+    const effectiveHighlight = highlight;
+
+    if (effectiveHighlight) {
         if (pathObj.polylines) {
-            pathObj.polylines.forEach(p => p.setStyle({ opacity: 1 }));
+            pathObj.polylines.forEach(p => {
+                if (p._isOutline) {
+                    p.setStyle({ opacity: p._outlineOpacity ?? 0.85 });
+                } else {
+                    p.setStyle({ opacity: p._originalOpacity ?? 1, weight: p._originalWeight ?? 3 });
+                }
+            });
         }
         if (pathObj.markers) {
             pathObj.markers.forEach(m => {
                 const el = m.getElement();
                 if (el) {
-                    const icon = el.querySelector('.transit-path-icon, .walk-icon');
+                    const icon = el.querySelector('div');
                     if (icon) icon.style.opacity = '1';
                 }
             });
@@ -689,7 +1204,7 @@ window.highlightPath = function (pathId, highlight, pathObj = null) {
             pathObj.markers.forEach(m => {
                 const el = m.getElement();
                 if (el) {
-                    const icon = el.querySelector('.transit-path-icon, .walk-icon');
+                    const icon = el.querySelector('div');
                     if (icon) icon.style.opacity = '0';
                 }
             });
@@ -712,7 +1227,7 @@ window.highlightPath = function (pathId, highlight, pathObj = null) {
 window.updateWalkingLabelsZoom = function () {
     if (!window.walkingPathsGroup) return;
     const zoom = window.map.getZoom();
-    const isHighZoom = zoom >= 14;
+    const isHighZoom = zoom >= 12;
 
     document.querySelectorAll('.path-label > div').forEach(el => {
         el.style.opacity = isHighZoom ? '1' : '0';
@@ -739,15 +1254,8 @@ window.toggleScoreFilter = function (filter) {
 window.selectedVibes = [];
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Show modal on load
-    const backdrop = document.getElementById('preferences-backdrop');
-    const panel = document.getElementById('ui-panel');
-    if (backdrop && panel) {
-        setTimeout(() => {
-            backdrop.classList.add('visible');
-            panel.classList.add('visible');
-        }, 500);
-    }
+    // Set initial view to search-perimeter
+    window.setSidebarView('search-perimeter');
 
     document.querySelectorAll('.vibe-chip').forEach(chip => {
         chip.addEventListener('click', () => {
@@ -890,37 +1398,11 @@ window.zoomToActiveAxis = function () {
 };
 
 window.openPreferencesModal = function () {
-    const backdrop = document.getElementById('preferences-backdrop');
-    const panel = document.getElementById('ui-panel');
-
-    if (backdrop && panel) {
-        panel.classList.add('modal-mode');
-        // Small delay to ensure display: block is set before opacity transition
-        setTimeout(() => {
-            backdrop.classList.add('visible');
-            panel.classList.add('visible');
-        }, 10);
-    }
+    window.setSidebarView('search-perimeter');
 };
 
 window.closePreferencesModal = function () {
-    const backdrop = document.getElementById('preferences-backdrop');
-    const panel = document.getElementById('ui-panel');
-
-    if (backdrop && panel) {
-        backdrop.classList.remove('visible');
-        panel.classList.remove('visible');
-
-        // After animation, move panel back to sidebar mode
-        setTimeout(() => {
-            panel.classList.remove('modal-mode');
-            window.updateFilters();
-
-            if (window.isFirstSearch) {
-                window.isFirstSearch = false;
-            }
-        }, 600);
-    }
+    window.setSidebarView('ranking');
 };
 
 window.setPropertyType = function (type, btn) {
@@ -955,14 +1437,7 @@ window.selectSurfaceBucket = function (bucket, btn) {
 };
 
 // --- WORKPLACE MANAGEMENT ---
-window.activeWorkplaces = [
-    {
-        id: 'bastille',
-        limit: 45,
-        walkLimit: 15,
-        modes: ['metro', 'rer', 'train']
-    }
-];
+window.activeWorkplaces = [];
 
 window.toggleWorkplaceMode = function (hubId, mode) {
     const wp = window.activeWorkplaces.find(w => w.id === hubId);
@@ -1098,7 +1573,7 @@ window.renderWorkplaces = function () {
 // --- MAP INIT ---
 const map = L.map('map', {
     zoomControl: false,
-    preferCanvas: true
+    preferCanvas: false // 🔴 1. On désactive le canvas global ici
 }).setView([48.861, 2.443], 12);
 
 map.createPane('naturePane');
@@ -1110,7 +1585,7 @@ map.getPane('neighborhoods').style.zIndex = 400;
 
 map.createPane('cityCentersPane');
 map.getPane('cityCentersPane').style.zIndex = 402;
-map.getPane('cityCentersPane').style.pointerEvents = 'none'; // Restore to allow clicking layers underneath
+map.getPane('cityCentersPane').style.pointerEvents = 'none';
 
 map.createPane('transitLinesPane');
 map.getPane('transitLinesPane').style.zIndex = 405;
@@ -1130,9 +1605,20 @@ map.on('click', () => {
     document.querySelectorAll('.city-center-marker-container.active').forEach(c => c.classList.remove('active'));
 });
 map.getPane('topPane').style.pointerEvents = 'none';
+
 map.createPane('walkingPathsPane');
 map.getPane('walkingPathsPane').style.zIndex = 800;
 map.getPane('walkingPathsPane').style.pointerEvents = 'none';
+
+// 👇 2. C'EST ICI QU'IL FAUT AJOUTER LES RENDERERS (Juste avant window.map = map;)
+window.walkingRenderer = L.svg({ pane: 'walkingPathsPane' });
+window.neighborhoodsRenderer = L.svg({ pane: 'neighborhoods' });
+window.transitRenderer = L.svg({ pane: 'transitLinesPane' });
+window.cityCentersRenderer = L.svg({ pane: 'cityCentersPane' });
+window.natureRenderer = L.svg({ pane: 'naturePane' });
+window.noiseRenderer = L.svg({ pane: 'noisePane' });
+window.topRenderer = L.svg({ pane: 'topPane' });
+window.poiRenderer = L.svg({ pane: 'poiPane' });
 
 window.map = map;
 window.hoverCityLayer = L.layerGroup().addTo(map);
@@ -1151,14 +1637,19 @@ function updateVisibleInseeCache() {
     console.log("📍 Updated visible IRIS cache:", visible.length);
 }
 
-map.on('moveend', () => {
+const debouncedRender = (function(func, wait) {
+    let timeout;
+    return function() {
+        clearTimeout(timeout);
+        timeout = setTimeout(func, wait);
+    };
+})(() => {
     updateVisibleInseeCache();
     if (window.renderActiveLayers) window.renderActiveLayers();
-});
-map.on('zoomend', () => {
-    updateVisibleInseeCache();
-    if (window.renderActiveLayers) window.renderActiveLayers();
-});
+}, 60);
+
+map.on('moveend', debouncedRender);
+map.on('zoomend', debouncedRender);
 // Initial update
 setTimeout(updateVisibleInseeCache, 1000);
 
@@ -1189,6 +1680,38 @@ window.toggleSatelliteView = function (isSatellite) {
 const info = {};
 const infoDiv = document.getElementById('info-card');
 
+// --- SIDEBAR VIEW MANAGEMENT ---
+window.setSidebarView = function (view) {
+    const rankingDiv = document.getElementById('sidebar-results-content');
+    const infoDiv = document.getElementById('info-card');
+    const perimeterDiv = document.getElementById('search-perimeter-content');
+
+    // Helper to hide all views
+    const hideAll = () => {
+        if (rankingDiv) rankingDiv.classList.add('view-hidden');
+        if (infoDiv) {
+            infoDiv.classList.remove('visible');
+            infoDiv.classList.add('view-hidden');
+        }
+        if (perimeterDiv) perimeterDiv.classList.add('view-hidden');
+    };
+
+    hideAll();
+
+    const modeBadge = document.getElementById('sidebar-mode-badge');
+
+    if (view === 'info') {
+        if (infoDiv) {
+            infoDiv.classList.remove('view-hidden');
+            void infoDiv.offsetWidth;
+            infoDiv.classList.add('visible');
+        }
+    } else {
+        // "Nothing" state
+        hideAll();
+    }
+};
+
 // Block all map interaction when touching the info card
 if (infoDiv) {
     L.DomEvent.disableClickPropagation(infoDiv);
@@ -1208,12 +1731,13 @@ info.update = function (props, isSticky = false) {
 
         if (!props || !props.nom) {
             if (selectedLayer) return;
-            infoDiv.classList.remove('visible');
+            window.setSidebarView('none');
             infoDiv.classList.remove('sticky-box');
             return;
         }
 
-        infoDiv.classList.add('visible');
+        // Contextual Switch: Use unified function
+        window.setSidebarView('info');
 
         if (isSticky) {
             infoDiv.classList.add('sticky-box');
@@ -1223,166 +1747,181 @@ info.update = function (props, isSticky = false) {
 
         const matchData = calculateMatchRate(props);
         const matchRate = matchData?.total || 0;
-        const matchColor = matchRate > 85 ? 'text-emerald-600' : (matchRate > 70 ? 'text-green-500' : (matchRate > 50 ? 'text-lime-500' : (matchRate > 30 ? 'text-yellow-500' : (matchRate > 15 ? 'text-orange-500' : 'text-red-500'))));
+        // Define section icons (SVGs with yellow shadows as per user design)
+        const SECTION_ICONS = {
+            search: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7" fill="#fef08a" transform="translate(1, 1)"/><circle cx="12" cy="12" r="7" stroke="#0d1c40" stroke-width="2" fill="white"/><circle cx="12" cy="12" r="2" fill="#0d1c40"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
+            compass: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" fill="#fef08a" transform="translate(1, 1)"/><circle cx="12" cy="12" r="8" stroke="#0d1c40" stroke-width="2" fill="white"/><path d="M15.5 8.5L10 10l-1.5 5.5L14 14l1.5-5.5z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`,
+            about: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none"><path d="M4 21h16M6 21V9m12 12V9M10 21V9m4 12V9M3 9l9-5 9 5" fill="#fef08a" transform="translate(1, 1)"/><path d="M4 21h16M6 21V9m12 12V9M10 21V9m4 12V9M3 9l9-5 9 5" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`
+        };
 
-        let html = `
-        <div class="flex flex-col h-full bg-white overflow-hidden rounded-t-2xl">
-            ${isSticky ? `
-            <div class="flex-shrink-0 flex items-center justify-between bg-slate-900 text-white px-5 py-3 gap-4">
-                 <div class="flex flex-col">
-                    <span class="text-[13px] font-bold text-white leading-tight">${cleanName(props.nom)}</span>
-                    <span class="text-[9px] opacity-70 uppercase tracking-tighter">Code #${props.code}</span>
-                 </div>
-                 <button onclick="deselectFeature()" class="p-2 hover:bg-white/10 rounded-lg transition-all text-white">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
-                 </button>
-            </div>` : `
-            <div class="flex-shrink-0 p-3 bg-white border-b border-gray-100">
-                <h4 class="text-[14px] font-bold text-gray-900 leading-tight">${cleanName(props.nom)}</h4>
-                <div class="text-[9px] text-gray-400 mt-0.5 italic">Survoler pour voir les détails.</div>
-            </div>`}
-            
-            <!-- Global Match Score - More Compact -->
-            <div class="flex-shrink-0 px-5 py-2.5 bg-white border-b border-gray-100 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="text-3xl font-black ${matchData.excluded ? 'text-gray-300' : matchColor}">${matchRate}%</div>
-                    <div class="text-[10px] font-black ${matchData.excluded ? 'bg-gray-100 text-gray-400' : matchColor.replace('text-', 'bg-').replace('600', '100').replace('500', '100') + ' ' + matchColor} px-2 py-0.5 rounded-md">
-                        ${matchData.excluded ? 'Exclu' : (matchRate > 85 ? 'Idéal' : (matchRate > 65 ? 'Favorable' : (matchRate > 40 ? 'Passable' : 'Faible')))}
+        const CAT_ICONS = {
+            immo: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><path d="M4 10l8-7 8 7v10a1 1 0 01-1 1H5a1 1 0 01-1-1V10z" fill="#fef08a" transform="translate(2, 2)"/><path d="M4 10l8-7 8 7v10a1 1 0 01-1 1H5a1 1 0 01-1-1V10z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M9 21V12h6v9" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`,
+            commute: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#fef08a" transform="translate(2, 2)"/><circle cx="12" cy="12" r="9" stroke="#0d1c40" stroke-width="2" fill="white"/><path d="M12 7v5l3 3" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
+            mobility: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><path d="M13 3L4 14h7l-2 7 9-11h-7l2-7z" fill="#fef08a" transform="translate(2, 2)"/><path d="M13 3L4 14h7l-2 7 9-11h-7l2-7z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`,
+            urbanisme: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="16" fill="#fef08a" transform="translate(2, 2)"/><rect x="5" y="4" width="14" height="16" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M9 8h2m2 0h2M9 12h2m2 0h2M9 16h2m2 0h2" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
+            socio: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><path d="M17 8C17 5.23858 14.7614 3 12 3C9.23858 3 7 5.23858 7 8C4.79086 8 3 9.79086 3 12C3 14.2091 4.79086 16 7 16H17C19.2091 16 21 14.2091 21 12C21 9.79086 19.2091 8 17 8Z" fill="#fef08a" transform="translate(2, 2)"/><path d="M17 8C17 5.23858 14.7614 3 12 3C9.23858 3 7 5.23858 7 8C4.79086 8 3 9.79086 3 12C3 14.2091 4.79086 16 7 16H17C19.2091 16 21 14.2091 21 12C21 9.79086 19.2091 8 17 8Z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M8 12c1.5 1 3.5 1 5 0m-4-4c1.5-1 3.5-1 5 0" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
+            safety: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#fef08a" transform="translate(2, 2)"/><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M12 2v20" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
+            education: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><path d="M12 14l9-5-9-5-9 5 9 5z" fill="#fef08a" transform="translate(2, 2)"/><path d="M12 14l9-5-9-5-9 5 9 5z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M6 10.6V16c0 1.5 2.5 3 6 3s6-1.5 6-3v-5.4" stroke="#0d1c40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+        };
+
+        const html = `
+        <div class="flex flex-col h-full bg-white rounded-3xl overflow-hidden shadow-xl">
+            <!-- Header Section -->
+            <div class="p-6 pb-4 border-b border-slate-100">
+                <div class="flex items-start justify-between">
+                    <div class="flex flex-col min-w-0">
+                        <h2 class="text-3xl font-black text-[#0d1c40] tracking-tight leading-none">
+                            ${props.commune || ''} <br>
+                            <span class="text-xl text-slate-400 font-bold">${cleanName(props.nom)}</span>
+                        </h2>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span class="text-4xl font-black ${matchData.excluded ? 'text-slate-200' : 'text-emerald-500'} tracking-tighter">${matchRate}%</span>
+                        <button onclick="deselectFeature()" class="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors border border-slate-200 shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
                     </div>
                 </div>
-                <div class="text-[8px] font-bold text-slate-300 uppercase tracking-[0.2em]">Bonheur</div>
-            </div>
-
-            <!-- Badges - More Compact -->
-            <div id="quartier-badges" class="flex-shrink-0 px-5 py-2 flex flex-wrap gap-1.5 border-b border-gray-100 bg-white">
-                ${getQuartierBadges(props).map(b => `
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-md ${b.color} text-[9px] font-bold border border-black/5 shadow-sm">
-                        <span>${b.text}</span>
-                    </span>
-                `).join('')}
-            </div>
-            
-            <!-- Dual Scroll Body -->
-            <div class="flex-1 flex flex-col min-h-0">
                 
-                <!-- Sections: Reorganized Categories -->
-                <div class="flex-1 overflow-y-auto">
-                    <div class="flex flex-col pb-6">
-                        ${(() => {
-                const sectionMapping = [
-                    {
-                        title: "Périmètre de recherche",
-                        icon: "🎯",
-                        ids: ["immo", "commute"]
-                    },
-                    {
-                        title: "Comprendre le quartier",
-                        icon: "🧭",
-                        ids: ["mobility", "urbanisme", "vieQuartier", "socio", "demo"]
-                    },
-                    {
-                        title: `À propos de ${props.commune || 'la ville'}`,
-                        icon: "🏛️",
-                        ids: ["finances", "safety", "infra", "education"]
-                    }
-                ];
-
-                return sectionMapping.map(section => `
-                                <div class="flex-shrink-0 px-5 py-2 bg-slate-50/80 border-b border-gray-100 mt-2 first:mt-0">
-                                    <div class="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                        <span>${section.icon}</span> ${section.title}
-                                    </div>
-                                </div>
-                                ${section.ids.map(id => {
-                    const cat = matchData.categories[id];
-                    if (!cat || !cat.label || cat.isHidden) return '';
-                    const isOpen = window.activeAccordion === id;
-                    const prefDropdown = document.getElementById('pref-' + id);
-                    const hasPref = !!prefDropdown;
-                    const prefValue = prefDropdown?.value;
-
-                    let prefColor = "text-slate-400";
-                    if (hasPref && prefValue) {
-                        const prefIdx = cat.scale.indexOf(prefValue);
-                        const diff = Math.abs(cat.scaleIndex - prefIdx);
-                        prefColor = diff === 0 ? "text-emerald-500" : (diff === 1 ? "text-yellow-500" : "text-red-500");
-                    } else if (id === 'immo') {
-                        prefColor = cat.score > 70 ? "text-emerald-500" : (cat.score > 40 ? "text-yellow-500" : "text-red-500");
-                    } else if (id === 'mobility') {
-                        const mobilityColors = {
-                            "Loin des gares": "text-red-500", "Connecté": "text-orange-400",
-                            "Sur le métro": "text-green-500", "Hub hyper-centre": "text-emerald-600"
-                        };
-                        prefColor = mobilityColors[cat.appreciation] || "text-slate-400";
-                    } else if (id === 'commute') {
-                        const commuteColors = {
-                            "Pénible": "text-red-500", "Moyen": "text-orange-400",
-                            "Confortable": "text-green-500", "Idéal": "text-emerald-600"
-                        };
-                        prefColor = commuteColors[cat.appreciation] || "text-slate-400";
-                    } else {
-                        prefColor = cat.score > 80 ? "text-emerald-400" : (cat.score > 50 ? "text-yellow-400" : "text-slate-300");
-                    }
-
-                    return `
-                                    <div class="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors sources-container relative">
-                                        <button onclick="window.toggleAccordion('${id}')" class="w-full flex items-center justify-between px-5 py-2.5 text-left">
-                                            <div class="flex items-center gap-3">
-                                                <div class="w-6 flex justify-center flex-shrink-0 text-base">${cat.icon}</div>
-                                                <div class="flex flex-col">
-                                                    <div class="text-[11px] font-bold text-gray-800 leading-tight">${cat.label}</div>
-                                                    <div class="text-[9px] font-bold ${prefColor}">${cat.appreciation}</div>
-                                                </div>
-                                            </div>
-                                            <div class="flex items-center gap-2">
-                                                <div class="flex items-center gap-1 px-2 py-0.5 bg-gray-50 rounded-full border border-gray-100">
-                                                    ${cat.isCustomScale ? `
-                                                        <span class="text-[8px] font-black ${prefColor} tracking-tighter">${cat.score}% match</span>
-                                                    ` : cat.scale.map((stepName, idx) => {
-                        const isActive = idx === cat.scaleIndex;
-                        const dotColor = isActive ? prefColor.replace('text-', 'bg-') : 'bg-gray-200';
-                        return `<div class="w-1 h-1 rounded-full ${dotColor}"></div>`;
+                <!-- Tags - New Style -->
+                <div class="flex flex-wrap gap-2 mt-5">
+                    ${getQuartierBadges(props).map(b => {
+                        const classes = b.color.split(' ');
+                        const bgClass = classes.find(c => c.startsWith('bg-')) || 'bg-slate-50';
+                        const match = bgClass.match(/bg-(.+)-\d+/);
+                        const colorName = match ? match[1] : 'slate';
+                        
+                        // Map specific colors to their text shades for premium look
+                        const textShade = (colorName === 'amber' || colorName === 'orange' || colorName === 'yellow') ? '700' : '600';
+                        const styleClasses = `bg-${colorName}-50 text-${colorName}-${textShade} border-${colorName}-100/50`;
+                        
+                        return `<span class="px-2.5 py-1 ${styleClasses} rounded-md text-[10px] font-bold border">${b.text}</span>`;
                     }).join('')}
-                                                </div>
-                                                <svg class="w-3 h-3 text-gray-300 transform transition-transform ${isOpen ? 'rotate-180 text-blue-500' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+            </div>
+
+            <!-- Scrollable Content -->
+            <div class="flex-1 overflow-y-auto scrollbar-hide">
+                ${(() => {
+                    const sectionMapping = [
+                        {
+                            title: "PÉRIMÈTRE DE RECHERCHE",
+                            icon: SECTION_ICONS.search,
+                            ids: ["immo", "commute"]
+                        },
+                        {
+                            title: "COMPRENDRE LE QUARTIER",
+                            icon: SECTION_ICONS.compass,
+                            ids: ["mobility", "urbanisme", "vieQuartier", "socio"]
+                        },
+                        {
+                            title: `À PROPOS DE ${props.commune?.toUpperCase() || 'LA VILLE'}`,
+                            icon: SECTION_ICONS.about,
+                            ids: ["safety", "education", "infra", "finances"]
+                        }
+                    ];
+
+                    return sectionMapping.map(section => `
+                        <div class="bg-slate-50/80 px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b border-slate-100">
+                            ${section.icon}
+                            ${section.title}
+                        </div>
+                        
+                        ${section.ids.map(id => {
+                            const cat = matchData.categories[id];
+                            if (!cat || !cat.label || cat.isHidden) return '';
+                            const isOpen = window.activeAccordion === id;
+                            
+                            // Determine indicator style (badge or dots)
+                            let indicatorHtml = '';
+                            let prefColor = "text-slate-400";
+                            
+                            // Color logic
+                            if (id === 'immo') {
+                                prefColor = cat.score > 70 ? "text-emerald-500" : (cat.score > 40 ? "text-amber-500" : "text-red-500");
+                            } else if (id === 'mobility' || id === 'commute') {
+                                const mColors = {
+                                    "Loin des gares": "text-red-500", "Connecté": "text-orange-400",
+                                    "Sur le métro": "text-emerald-500", "Hub hyper-centre": "text-emerald-600",
+                                    "Pénible": "text-red-500", "Moyen": "text-orange-400",
+                                    "Confortable": "text-emerald-500", "Idéal": "text-emerald-600"
+                                };
+                                prefColor = mColors[cat.appreciation] || "text-slate-400";
+                            } else {
+                                prefColor = cat.score > 80 ? "text-emerald-500" : (cat.score > 50 ? "text-amber-500" : "text-slate-400");
+                            }
+
+                            if (cat.isCustomScale || id === 'immo') {
+                                const badgeColor = prefColor.includes('emerald') ? 'bg-emerald-50 text-emerald-600 border-emerald-100/50' : 
+                                                 (prefColor.includes('amber') || prefColor.includes('orange') ? 'bg-amber-50 text-amber-700 border-amber-100/50' : 'bg-red-50 text-red-600 border-red-100/50');
+                                indicatorHtml = `<span class="px-2 py-0.5 ${badgeColor} text-[10px] font-black rounded border uppercase tracking-wide">${cat.score}% match</span>`;
+                            } else {
+                                // Dots indicator
+                                indicatorHtml = `
+                                    <div class="flex gap-1.5 bg-slate-50 border border-slate-100 px-2 py-1.5 rounded-full">
+                                        ${cat.scale.map((_, idx) => {
+                                            const isActive = idx === cat.scaleIndex;
+                                            const dotColor = isActive ? prefColor.replace('text-', 'bg-') : 'bg-slate-200';
+                                            const shadow = isActive ? `shadow-[0_0_4px_${prefColor.replace('text-', 'rgba(').replace('500', '0.5)')}]` : '';
+                                            return `<div class="w-1.5 h-1.5 rounded-full ${dotColor} ${shadow}"></div>`;
+                                        }).join('')}
+                                    </div>
+                                `;
+                            }
+
+                            return `
+                                <div class="sources-container relative border-b border-slate-50">
+                                    <button onclick="window.toggleAccordion('${id}')" class="w-full flex items-center justify-between p-4 px-6 hover:bg-slate-50 transition-colors group">
+                                        <div class="flex items-center gap-4">
+                                            <div class="w-8 h-8 shrink-0 flex items-center justify-center">
+                                                ${CAT_ICONS[id] || `<div class="text-xl">${cat.icon}</div>`}
                                             </div>
-                                        </button>
-                                        
-                                        ${isOpen ? `
-                                        <div class="absolute top-2.5 right-12 z-20">
-                                            <button onclick="window.toggleSources('${id}', event)" class="sources-trigger flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-blue-200 bg-blue-50/50 text-[8px] font-bold text-blue-600 hover:bg-blue-100 transition-all shadow-sm">
-                                                Sources <svg class="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                            <div class="text-left">
+                                                <h3 class="font-extrabold text-[#0d1c40] text-sm">${cat.label}</h3>
+                                                <p class="${prefColor} text-xs font-bold mt-0.5">${cat.appreciation}</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-3">
+                                            ${indicatorHtml}
+                                            <svg class="w-4 h-4 text-slate-300 transform transition-transform ${isOpen ? 'rotate-180 text-blue-500' : 'group-hover:text-slate-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                        </div>
+                                    </button>
+
+                                    ${isOpen ? `
+                                    <div class="px-6 pb-6 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div class="mb-4">
+                                            <button onclick="window.toggleSources('${id}', event)" class="sources-trigger flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-100 bg-blue-50/50 text-[10px] font-bold text-blue-600 hover:bg-blue-100 transition-all shadow-sm">
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                Sources de données
                                             </button>
-                                            <div id="sources-dropdown-${id}" class="sources-dropdown hidden absolute top-full right-0 mt-2 w-64 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-100 p-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                                                <div class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-3">Sources de données</div>
+                                            <div id="sources-dropdown-${id}" class="sources-dropdown hidden absolute top-12 left-6 right-6 z-30 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-100 p-5 animate-in fade-in zoom-in duration-200">
+                                                <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Sources détaillées</div>
                                                 <div class="space-y-4">
                                                     ${(CATEGORY_SOURCES[id] || []).map(s => `
-                                                        <div class="flex gap-3">
-                                                            <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-sm shrink-0 shadow-inner">${s.icon}</div>
+                                                        <div class="flex gap-4">
+                                                            <div class="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-lg shrink-0 shadow-inner">${s.icon}</div>
                                                             <div class="flex flex-col">
-                                                                <div class="flex items-center gap-1.5">
-                                                                    <span class="text-[10px] font-black text-slate-800">${s.title}</span>
-                                                                    <span class="text-[9px] text-slate-400 font-bold">(${s.year})</span>
+                                                                <div class="flex items-center gap-2">
+                                                                    <span class="text-[11px] font-black text-slate-800">${s.title}</span>
+                                                                    <span class="text-[10px] text-slate-400 font-bold">(${s.year})</span>
                                                                 </div>
-                                                                <span class="text-[9px] text-slate-500 leading-tight mt-0.5">${s.desc}</span>
+                                                                <span class="text-[10px] text-slate-500 leading-tight mt-1">${s.desc}</span>
                                                             </div>
                                                         </div>
                                                     `).join('')}
                                                 </div>
                                             </div>
-                                        </div>` : ''}
-
-                                        ${isOpen ? `<div class="px-5 pb-4 text-[10px] text-gray-600 animate-in fade-in slide-in-from-top-2 duration-200">${renderCategoryDetails(id, props, cat, matchData)}</div>` : ''}
-                                    </div>`;
-                }).join('')}
-                            `).join('');
-            })()}
-                    </div>
-                </div>
-
+                                        </div>
+                                        <div class="text-xs text-slate-600 leading-relaxed">${renderCategoryDetails(id, props, cat, matchData)}</div>
+                                    </div>` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                    `).join('');
+                })()}
             </div>
         </div>
-`;
+        `;
         infoDiv.innerHTML = html;
     } catch (err) {
         console.error("Error updating info box:", err);
@@ -1396,24 +1935,44 @@ info.update = function (props, isSticky = false) {
     }
 };
 
-window.activeAccordion = 'urbanisme'; // Default open to Urbanisme
+window.activeAccordion = null;
+
+// Returns the path type that should be visible for the current accordion,
+// or null if no paths should be shown.
+window.getVisiblePathType = function (accordion) {
+    switch (accordion) {
+        case 'commute': return 'workplace';
+        case 'vieQuartier': return 'center';
+        case 'mobility':
+        case 'infra': return 'station';
+        default: return null; // all other categories → hide all paths
+    }
+};
 
 window.highlightAllWalkingPaths = function (visible, filterType = null) {
     if (!window.activeWalkingPaths) return;
 
     // Determine the relevant type for the current accordion if none provided
     let effectiveFilterType = filterType;
-    if (!effectiveFilterType && visible) {
-        if (window.activeAccordion === 'commute') effectiveFilterType = 'workplace';
-        else if (window.activeAccordion === 'vieQuartier') effectiveFilterType = 'center';
-        else if (window.activeAccordion === 'mobility' || window.activeAccordion === 'infra') effectiveFilterType = 'station';
+    if (visible && effectiveFilterType === null) {
+        effectiveFilterType = window.getVisiblePathType(window.activeAccordion);
+        // If accordion maps to no type (other categories), hide everything
+        if (effectiveFilterType === null) {
+            window.activeWalkingPaths.forEach(path => window.highlightPath(path.id, false, path));
+            return;
+        }
     }
 
     window.activeWalkingPaths.forEach(path => {
         let show = visible;
         if (effectiveFilterType) {
-            show = visible && (path.type === effectiveFilterType);
+            if (Array.isArray(effectiveFilterType)) {
+                show = visible && effectiveFilterType.includes(path.type);
+            } else {
+                show = visible && (path.type === effectiveFilterType);
+            }
         }
+        
         window.highlightPath(path.id, show, path);
     });
 };
@@ -1422,8 +1981,9 @@ window.highlightPathByName = function (name) {
     if (!window.activeWalkingPaths) return;
 
     if (!name) {
-        // Use the new smart filtering
-        window.highlightAllWalkingPaths(true);
+        // Reset to category-appropriate visibility
+        const visibleType = window.getVisiblePathType(window.activeAccordion);
+        window.highlightAllWalkingPaths(visibleType !== null, visibleType || undefined);
         return;
     }
 
@@ -1451,74 +2011,145 @@ window.highlightPathByName = function (name) {
 };
 
 window.updateContextualMap = function (categoryId) {
-    // 1. Cacher visuellement les pastilles pour le reset
+    // 1. Gérer la visibilité des groupes de pills à droite
+    const allPillGroups = ['pill-group-mobility', 'pill-group-commerces', 'pill-group-sante', 'pill-group-sorties', 'pill-group-infra', 'pill-group-maps', 'pill-group-immo'];
+    const pillMappings = {
+        'immo': ['pill-group-immo'],
+        'mobility': ['pill-group-mobility'],
+        'commute': ['pill-group-mobility'],
+        'urbanisme': ['pill-group-maps'],
+        'vieQuartier': ['pill-group-commerces', 'pill-group-sorties', 'pill-group-sante'],
+        'infra': ['pill-group-infra'],
+        'education': ['pill-group-infra'],
+        'safety': ['pill-group-maps'],
+        'socio': ['pill-group-maps'],
+        'finances': ['pill-group-immo']
+    };
+
+    if (categoryId) {
+        const allowedPills = pillMappings[categoryId] || [];
+        allPillGroups.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                if (allowedPills.includes(id)) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            }
+        });
+    } else {
+        // Mode "tout afficher" quand l'accordéon est fermé
+        allPillGroups.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('hidden');
+        });
+    }
+
+    // 2. Cacher visuellement les pastilles contextuelles (points d'intérêt sur la carte)
     document.querySelectorAll('.context-pill').forEach(p => p.classList.add('hidden'));
 
-    // 2. Laisser l'UI respirer 100ms
-    setTimeout(() => {
-        const mappings = {
-            'immo': { 'show-transactions': true },
-            'mobility': { 'group-mobilite': true },
-            'commute': {},
-            'urbanisme': { 'show-espaces-verts': true, 'show-osm-context': true },
-            'vieQuartier': { 'show-centre-ville': true },
-            'infra': { 'group-infra': true },
-            'education': { 'show-schools': true },
-            'safety': { 'show-qpv': true, 'show-zsp': true }
-        };
+    const mappings = {
+        'immo': { 'show-transactions': true },
+        'mobility': { 'show-stations': true },
+        'commute': {},
+        'urbanisme': {},
+        'vieQuartier': { 'show-centre-ville': true },
+        'infra': { 'group-infra': true },
+        'education': { 'show-schools': true },
+        'safety': { 'show-qpv': true, 'show-zsp': true }
+    };
 
-        const config = mappings[categoryId];
-        if (config) {
-            // A. Tout décocher d'abord (Reset propre)
-            Object.values(mappings).forEach(mapGroup => {
-                for (const id in mapGroup) {
-                    const el = document.getElementById(id);
-                    if (el) {
-                        el.checked = false;
-                        if (id.startsWith('group-')) {
-                            const gid = id.replace('group-', '');
-                            document.querySelectorAll(`.sub-${gid}`).forEach(s => s.checked = false);
-                        }
-                    }
-                }
-            });
-
-            // B. Cocher uniquement ce qui concerne la catégorie cliquée
-            for (const [id, state] of Object.entries(config)) {
+    const config = mappings[categoryId];
+    if (config) {
+        // A. Tout décocher d'abord (Reset propre)
+        Object.values(mappings).forEach(mapGroup => {
+            for (const id in mapGroup) {
                 const el = document.getElementById(id);
                 if (el) {
-                    el.checked = state;
+                    el.checked = false;
                     if (id.startsWith('group-')) {
                         const gid = id.replace('group-', '');
-                        document.querySelectorAll(`.sub-${gid}`).forEach(s => s.checked = state);
-                    } else {
-                        // Si c'est un sous-élément, on met à jour l'état du parent
-                        const subClass = Array.from(el.classList).find(c => c.startsWith('sub-'));
-                        if (subClass) {
-                            const gid = subClass.replace('sub-', '');
-                            if (window.updateChildState) window.updateChildState(gid);
-                        }
+                        document.querySelectorAll(`.sub-${gid}`).forEach(s => s.checked = false);
                     }
                 }
             }
+        });
 
-            // C. Lancer TOUTES les mises à jour cartographiques
-            requestAnimationFrame(() => {
-                if (window.renderActiveLayers) window.renderActiveLayers();
-                if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
-                if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
-                if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
-                if (window.updateQPVVisibility) window.updateQPVVisibility();
-                if (window.updateZSPVisibility) window.updateZSPVisibility();
-                if (window.updateEspacesVertsVisibility) window.updateEspacesVertsVisibility();
-                if (window.updateNoiseVisibility) window.updateNoiseVisibility();
-                if (window.updatePathsVisibility) window.updatePathsVisibility();
-                
-                // D. Mettre à jour les trajets (Critique pour la visibilité immédiate)
-                if (window.highlightAllWalkingPaths) window.highlightAllWalkingPaths(true);
-            });
+        // B. Cocher uniquement ce qui concerne la catégorie cliquée
+        for (const [id, state] of Object.entries(config)) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.checked = state;
+                if (id.startsWith('group-')) {
+                    const gid = id.replace('group-', '');
+                    document.querySelectorAll(`.sub-${gid}`).forEach(s => s.checked = state);
+                } else {
+                    const subClass = Array.from(el.classList).find(c => c.startsWith('sub-'));
+                    if (subClass) {
+                        const gid = subClass.replace('sub-', '');
+                        if (window.updateChildState) window.updateChildState(gid);
+                    }
+                }
+            }
         }
-    }, 100);
+
+        // C. Lancer TOUTES les mises à jour cartographiques
+        if (window.renderActiveLayers) window.renderActiveLayers();
+        if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
+        if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
+        if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
+        if (window.updateQPVVisibility) window.updateQPVVisibility();
+        if (window.updateZSPVisibility) window.updateZSPVisibility();
+        if (window.updateEspacesVertsVisibility) window.updateEspacesVertsVisibility();
+        if (window.updateNoiseVisibility) window.updateNoiseVisibility();
+        if (window.updatePathsVisibility) window.updatePathsVisibility();
+    }
+
+    // Stop any ongoing movement to prevent race conditions
+    map.stop();
+
+    // D. Toujours mettre à jour les trajets selon la catégorie active
+    const visibleType = window.getVisiblePathType(categoryId);
+    if (window.highlightAllWalkingPaths) {
+        window.highlightAllWalkingPaths(visibleType !== null, visibleType || undefined);
+    }
+
+    // Small delay to ensure layout has settled (sidebar width etc.)
+    setTimeout(() => {
+        // JOURNEY ZOOM: Show the whole path when commute is selected
+        if (categoryId === 'commute' && window.selectedLayer) {
+            const irisBounds = window.selectedLayer.getBounds();
+            const commuteCriteria = (window.searchCriteria || []).find(c => c.property === 'commute');
+            const hubId = commuteCriteria?.workplace || (window.activeWorkplaces?.[0]?.id) || 'bastille';
+            const hub = window.HUBS_COORDS?.[hubId];
+            if (hub) {
+                const hubLatLng = L.latLng(hub.lat, hub.lon);
+                const journeyBounds = L.latLngBounds(irisBounds.getSouthWest(), irisBounds.getNorthEast());
+                journeyBounds.extend(hubLatLng);
+                map.flyToBounds(journeyBounds, {
+                    paddingTopLeft: [420, 100], // Sidebar offset
+                    paddingBottomRight: [100, 100],
+                    maxZoom: 13,
+                    duration: 0.8
+                });
+                map.setMinZoom(11); // Allow more de-zoom for journey
+            }
+        } else if (window.selectedLayer && typeof window.selectedLayer.getBounds === 'function') {
+            // Focus back on the specific neighborhood IRIS
+            map.flyToBounds(window.selectedLayer.getBounds(), {
+                paddingTopLeft: [360, 50],
+                paddingBottomRight: [50, 50],
+                maxZoom: 15,
+                duration: 0.8
+            });
+            map.setMinZoom(13.5);
+        } else if (window.activeCommuneName) {
+            // If no neighborhood selected but a city is active, return to city extent
+            console.log("[RE-ZOOM] Focusing back on city:", window.activeCommuneName);
+            if (window.selectCity) window.selectCity(window.activeCommuneName);
+        }
+    }, 50);
 };
 
 window.toggleAccordion = function (id) {
@@ -1536,8 +2167,8 @@ window.toggleAccordion = function (id) {
     window.updateContextualMap(window.activeAccordion);
 
     // Re-render the info box with the current feature
-    if (selectedLayer) {
-        info.update(selectedLayer.feature.properties, true);
+    if (window.selectedLayer) {
+        info.update(window.selectedLayer.feature.properties, true);
 
         // Restore scroll position after a short delay to allow DOM update
         setTimeout(() => {
@@ -1671,8 +2302,24 @@ function renderCategoryDetails(id, props, cat, matchData) {
             let html = `<div class="px-4 pb-4 space-y-2 mt-1">`;
             const activeHubs = window.activeWorkplaces || [];
             activeHubs.forEach(wp => {
-                const cached = window.precomputedJourneysRaw?.[props.code]?.[wp.id];
-                if (cached) {
+                const rawCache = window.precomputedJourneysRaw?.[props.code]?.[wp.id];
+
+                // We might have multiple itineraries for this workplace
+                const itineraries = [];
+                if (rawCache) {
+                    if (rawCache.main) {
+                        itineraries.push({ ...rawCache.main, label: 'Principal', key: 'main' });
+                    }
+                    if (rawCache.alternate) {
+                        itineraries.push({ ...rawCache.alternate, label: 'Alternatif', key: 'alternate' });
+                    }
+                    // Fallback for legacy format
+                    if (itineraries.length === 0 && rawCache.duration) {
+                        itineraries.push({ ...rawCache, label: 'Itinéraire', key: 'main' });
+                    }
+                }
+
+                if (itineraries.length > 0) {
                     const hubNames = {
                         'bastille': 'Bastille, Paris',
                         'saint-lazare': 'Saint-Lazare, Paris',
@@ -1682,69 +2329,71 @@ function renderCategoryDetails(id, props, cat, matchData) {
                         'saint-denis': 'Saint-Denis Pleyel'
                     };
                     const hubName = hubNames[wp.id] || wp.id;
-                    const isOverLimit = cached.duration > wp.limit;
 
-                    // Support both old 'itinerary' and new 'sections' format
-                    let breakdown = [];
-                    let firstMile = 0;
-                    let lastMile = 0;
+                    itineraries.forEach(cached => {
+                        const isOverLimit = cached.duration > wp.limit;
+                        const isSelected = window.commuteItineraryType === cached.key || (window.commuteItineraryType === 'main' && cached.key === 'main');
 
-                    if (cached.sections) {
-                        breakdown = cached.sections.filter(s => s.code || ['rer', 'metro', 'bus', 'tram', 'train'].includes(s.type));
-                        // In sections, walking are also sections. Sum durations.
-                        firstMile = (cached.sections[0].type === 'walking' || cached.sections[0].type === 'street_network') ? cached.sections[0].duration : 0;
-                        lastMile = (cached.sections[cached.sections.length - 1].type === 'walking' || cached.sections[cached.sections.length - 1].type === 'street_network') ? cached.sections[cached.sections.length - 1].duration : 0;
-                    } else if (cached.itinerary) {
-                        breakdown = cached.itinerary;
-                        firstMile = cached.firstMile || 0;
-                        lastMile = cached.lastMile || 0;
-                    }
+                        // Support both old 'itinerary' and new 'sections' format
+                        let breakdown = [];
+                        let firstMile = 0;
+                        let lastMile = 0;
 
-                    const stationName = breakdown.length > 0 ? breakdown[0].name || breakdown[0].code : '';
+                        if (cached.sections) {
+                            breakdown = cached.sections.filter(s => s.code || ['rer', 'metro', 'bus', 'tram', 'train'].includes(s.type));
+                            firstMile = (cached.sections[0].type === 'walking' || cached.sections[0].type === 'street_network') ? cached.sections[0].duration : 0;
+                            lastMile = (cached.sections[cached.sections.length - 1].type === 'walking' || cached.sections[cached.sections.length - 1].type === 'street_network') ? cached.sections[cached.sections.length - 1].duration : 0;
+                        } else if (cached.itinerary) {
+                            breakdown = cached.itinerary;
+                            firstMile = cached.firstMile || 0;
+                            lastMile = cached.lastMile || 0;
+                        }
 
-                    html += `
-                    <div onmouseover="window.highlightPathByName('${hubName}')" 
-                         onmouseout="window.highlightPathByName(null)"
-                         class="bg-white p-2 rounded-lg border ${isOverLimit ? 'border-red-100 bg-red-50/20' : 'border-gray-100'} shadow-xs hover:border-blue-300 transition-all cursor-pointer">
-                        <div class="flex items-center justify-between mb-1.5">
-                            <span class="text-[9px] text-gray-700 font-bold uppercase truncate max-w-[120px]">${hubName}</span>
-                            <span class="text-[9px] font-extrabold px-1.5 py-0.5 ${isOverLimit ? 'bg-red-500' : 'bg-blue-600'} text-white rounded-full shadow-sm">~${cached.duration} min</span>
-                        </div>`;
+                        html += `
+                        <div onclick="window.commuteItineraryType = '${cached.key}'; window.updateWalkingPath(selectedLayer.feature.properties); info.update(selectedLayer.feature.properties, true);"
+                             class="bg-white p-2 rounded-lg border ${isSelected ? 'border-blue-500 ring-2 ring-blue-100' : (isOverLimit ? 'border-red-100 bg-red-50/20' : 'border-gray-100')} shadow-xs hover:border-blue-300 transition-all cursor-pointer mb-2 last:mb-0">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-[9px] text-gray-700 font-bold uppercase truncate max-w-[120px]">${hubName}</span>
+                                    <span class="text-[7px] px-1 py-0.5 rounded-md ${cached.key === 'main' ? 'bg-slate-100 text-slate-500' : 'bg-amber-50 text-amber-600'} font-black uppercase tracking-tighter">${cached.label}</span>
+                                </div>
+                                <span class="text-[9px] font-extrabold px-1.5 py-0.5 ${isOverLimit ? 'bg-red-500' : 'bg-blue-600'} text-white rounded-full shadow-sm">~${cached.duration} min</span>
+                            </div>`;
 
-                    if (breakdown.length > 0 || firstMile > 0 || lastMile > 0) {
-                        html += `<div class="flex items-center flex-wrap gap-1 mt-1">`;
-                        if (firstMile > 0) html += `<span class="text-[8px] bg-gray-100 px-1 rounded flex items-center gap-0.5">🏃 ${firstMile} min</span>`;
-                        if (firstMile > 0 && breakdown.length > 0) html += `<span class="text-[7px] text-gray-300">→</span>`;
+                        if (breakdown.length > 0 || firstMile > 0 || lastMile > 0) {
+                            html += `<div class="flex items-center flex-wrap gap-1 mt-1">`;
+                            if (firstMile > 0) html += `<span class="text-[8px] bg-gray-100 px-1 rounded flex items-center gap-0.5">🏃 ${firstMile} min</span>`;
+                            if (firstMile > 0 && breakdown.length > 0) html += `<span class="text-[7px] text-gray-300">→</span>`;
 
-                        breakdown.forEach((step, idx) => {
-                            const type = (step.type || "").toLowerCase();
-                            const isCircle = type === "metro" || type === "rer" || type === "train";
-                            const color = step.color.startsWith('#') ? step.color : `#${step.color}`;
-                            const textColor = step.textColor ? (step.textColor.startsWith('#') ? step.textColor : `#${step.textColor}`) : '#ffffff';
+                            breakdown.forEach((step, idx) => {
+                                const type = (step.type || "").toLowerCase();
+                                const isCircle = type === "metro" || type === "rer" || type === "train";
+                                const color = step.color.startsWith('#') ? step.color : `#${step.color}`;
+                                const textColor = step.textColor ? (step.textColor.startsWith('#') ? step.textColor : `#${step.textColor}`) : '#ffffff';
 
-                            // Handle duration: if > 60, it's likely seconds, convert to minutes.
-                            let stepDuration = step.duration || 0;
-                            if (stepDuration > 60) stepDuration = Math.round(stepDuration / 60);
+                                let stepDuration = step.duration || 0;
+                                if (stepDuration > 60) stepDuration = Math.round(stepDuration / 60);
 
-                            html += `
-                                <div class="flex items-center gap-1 group relative">
-                                    <div class="flex items-center gap-0.5">
-                                        <span class="flex items-center justify-center font-bold text-[7px] shadow-xs border border-black/10" 
-                                              style="width:13px; height:13px; border-radius: ${isCircle ? '50%' : '2px'}; color: ${textColor}; background-color: ${color};">
-                                            ${step.code}
-                                        </span>
-                                        <span class="text-[7px] text-gray-400 font-medium">${stepDuration ? stepDuration + ' min' : ''}</span>
-                                    </div>
-                                </div>`;
-                            if (idx < breakdown.length - 1) html += `<span class="text-[7px] text-gray-300">→</span>`;
-                        });
+                                html += `
+                                    <div class="flex items-center gap-1 group relative">
+                                        <div class="flex items-center gap-0.5">
+                                            <span class="flex items-center justify-center font-bold text-[7px] shadow-xs border border-black/10" 
+                                                  style="width:13px; height:13px; border-radius: ${isCircle ? '50%' : '2px'}; color: ${textColor}; background-color: ${color};">
+                                                ${step.code}
+                                            </span>
+                                            <span class="text-[7px] text-gray-400 font-medium">${stepDuration ? stepDuration + ' min' : ''}</span>
+                                        </div>
+                                    </div>`;
+                                if (idx < breakdown.length - 1) html += `<span class="text-[7px] text-gray-300">→</span>`;
+                            });
 
-                        if (lastMile > 0 && breakdown.length > 0) html += `<span class="text-[7px] text-gray-300">→</span>`;
-                        if (lastMile > 0) html += `<span class="text-[8px] bg-gray-100 px-1 rounded flex items-center gap-0.5">🏃 ${lastMile} min</span>`;
+                            if (lastMile > 0 && breakdown.length > 0) html += `<span class="text-[7px] text-gray-300">→</span>`;
+                            if (lastMile > 0) html += `<span class="text-[8px] bg-gray-100 px-1 rounded flex items-center gap-0.5">🏃 ${lastMile} min</span>`;
 
+                            html += `</div>`;
+                        }
                         html += `</div>`;
-                    }
-                    html += `</div>`;
+                    });
                 }
             });
             html += `</div>`;
@@ -1869,17 +2518,17 @@ function renderCategoryDetails(id, props, cat, matchData) {
                     <div class="bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100/50 mt-1">
                         <div class="text-[8px] font-black text-indigo-500 uppercase tracking-widest mb-2">Culture & Sorties</div>
                         <div class="grid grid-cols-3 gap-2">
-                            <div class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-indigo-50">
+                            <div onmouseenter="window.highlightCommerceOnMap('cinema', '🍿', 'Cinémas')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-indigo-50 cursor-help hover:border-indigo-300 transition-all shadow-xs">
                                 <span class="text-xs">🍿</span>
                                 <span class="text-[10px] font-black text-gray-800">${d.cinemas || 0}</span>
                                 <span class="text-[7px] text-gray-400 font-bold uppercase">Cinémas</span>
                             </div>
-                            <div class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-indigo-50">
+                            <div onmouseenter="window.highlightCommerceOnMap('theatre', '🎭', 'Théâtres')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-indigo-50 cursor-help hover:border-indigo-300 transition-all shadow-xs">
                                 <span class="text-xs">🎭</span>
                                 <span class="text-[10px] font-black text-gray-800">${d.theatres || 0}</span>
                                 <span class="text-[7px] text-gray-400 font-bold uppercase">Théâtres</span>
                             </div>
-                            <div class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-indigo-50">
+                            <div onmouseenter="window.highlightCommerceOnMap('concert', '🎟️', 'Concerts')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-indigo-50 cursor-help hover:border-indigo-300 transition-all shadow-xs">
                                 <span class="text-xs">🎟️</span>
                                 <span class="text-[10px] font-black text-gray-800">${d.concerts || 0}</span>
                                 <span class="text-[7px] text-gray-400 font-bold uppercase">Concerts</span>
@@ -1890,22 +2539,22 @@ function renderCategoryDetails(id, props, cat, matchData) {
                     <div class="bg-blue-50/50 p-2.5 rounded-xl border border-blue-100/50">
                         <div class="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-2">Commerces de bouche</div>
                         <div class="grid grid-cols-4 gap-2">
-                            <div class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-blue-50">
+                            <div onmouseenter="window.highlightCommerceOnMap('boulangerie', '🥖', 'Boulangeries')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-blue-50 cursor-help hover:border-blue-300 transition-all shadow-xs">
                                 <span class="text-xs">🥖</span>
                                 <span class="text-[10px] font-black text-gray-800">${d.boulangerie}</span>
                                 <span class="text-[7px] text-gray-400 font-bold uppercase">Boulang.</span>
                             </div>
-                            <div class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-blue-50">
+                            <div onmouseenter="window.highlightCommerceOnMap('boucherie', '🥩', 'Boucheries')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-blue-50 cursor-help hover:border-blue-300 transition-all shadow-xs">
                                 <span class="text-xs">🥩</span>
                                 <span class="text-[10px] font-black text-gray-800">${d.boucherie}</span>
                                 <span class="text-[7px] text-gray-400 font-bold uppercase">Boucher.</span>
                             </div>
-                            <div class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-blue-50">
+                            <div onmouseenter="window.highlightCommerceOnMap('fromagerie', '🧀', 'Fromageries')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-blue-50 cursor-help hover:border-blue-300 transition-all shadow-xs">
                                 <span class="text-xs">🧀</span>
                                 <span class="text-[10px] font-black text-gray-800">${d.fromagerie}</span>
                                 <span class="text-[7px] text-gray-400 font-bold uppercase">Fromag.</span>
                             </div>
-                            <div class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-blue-50">
+                            <div onmouseenter="window.highlightCommerceOnMap('bio', '🥦', 'Commerces Bio')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex flex-col items-center p-1.5 bg-white rounded-lg border border-blue-50 cursor-help hover:border-blue-300 transition-all shadow-xs">
                                 <span class="text-xs">🥦</span>
                                 <span class="text-[10px] font-black text-gray-800">${d.bio}</span>
                                 <span class="text-[7px] text-gray-400 font-bold uppercase">Bio</span>
@@ -1915,21 +2564,21 @@ function renderCategoryDetails(id, props, cat, matchData) {
 
                     <div class="bg-pink-50/50 p-3 rounded-xl border border-pink-100/50">
                         <div class="text-[8px] font-black text-pink-400 uppercase tracking-widest mb-2">Gastronomie & Vie Nocturne</div>
-                        <div class="flex justify-between items-center mb-1">
+                        <div onmouseenter="window.highlightCommerceOnMap('restaurant', '🍽️', 'Restaurants')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex justify-between items-center mb-1 cursor-help p-1 hover:bg-white rounded-md transition-all">
                             <div class="flex items-center gap-2">
                                 <span class="text-sm">🍽️</span>
                                 <span class="text-[11px] text-gray-600 font-bold">Vrais Restaurants</span>
                             </div>
                             <span class="text-xs font-black text-pink-800">${d.restaurants || 0}</span>
                         </div>
-                        <div class="flex justify-between items-center mb-1">
+                        <div onmouseenter="window.highlightCommerceOnMap('fast_food', '🍔', 'Fast Food')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex justify-between items-center mb-1 cursor-help p-1 hover:bg-white rounded-md transition-all">
                             <div class="flex items-center gap-2">
                                 <span class="text-sm">🍔</span>
                                 <span class="text-[11px] text-gray-600 font-bold">Fast Food / Street Food</span>
                             </div>
                             <span class="text-xs font-black text-pink-800">${d.fast_food || 0}</span>
                         </div>
-                        <div class="flex justify-between items-center mb-1">
+                        <div onmouseenter="window.highlightCommerceOnMap('bar', '🍸', 'Bars & Pubs')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex justify-between items-center mb-1 cursor-help p-1 hover:bg-white rounded-md transition-all">
                             <div class="flex items-center gap-2">
                                 <span class="text-sm">🍸</span>
                                 <span class="text-[11px] text-gray-600 font-bold">Bars & Pubs</span>
@@ -1941,19 +2590,19 @@ function renderCategoryDetails(id, props, cat, matchData) {
                     <div class="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/50">
                         <div class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Pratique & Santé</div>
                         <div class="grid grid-cols-2 gap-2">
-                            <div class="flex justify-between text-[10px] font-bold text-slate-700">
+                            <div onmouseenter="window.highlightCommerceOnMap('supermarket', '🛒', 'Supermarchés')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex justify-between text-[10px] font-bold text-slate-700 cursor-help p-1 hover:bg-white rounded-md transition-all">
                                 <span>🛒 Superm.</span>
                                 <span>${d.supermarket}</span>
                             </div>
-                            <div class="flex justify-between text-[10px] font-bold text-slate-700">
+                            <div onmouseenter="window.highlightCommerceOnMap('pharmacie', '💊', 'Pharmacies')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex justify-between text-[10px] font-bold text-slate-700 cursor-help p-1 hover:bg-white rounded-md transition-all">
                                 <span>💊 Pharm.</span>
                                 <span>${d.pharmacie}</span>
                             </div>
-                            <div class="flex justify-between text-[10px] font-bold text-slate-700">
+                            <div onmouseenter="window.highlightCommerceOnMap('post_office', '✉️', 'Bureaux de Poste')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex justify-between text-[10px] font-bold text-slate-700 cursor-help p-1 hover:bg-white rounded-md transition-all">
                                 <span>✉️ Poste</span>
                                 <span>${d.poste}</span>
                             </div>
-                            <div class="flex justify-between text-[10px] font-bold text-slate-700">
+                            <div onmouseenter="window.highlightCommerceOnMap('marche', '🧺', 'Marchés')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex justify-between text-[10px] font-bold text-slate-700 cursor-help p-1 hover:bg-white rounded-md transition-all">
                                 <span>🧺 Marchés</span>
                                 <span>${d.marche || 0}</span>
                             </div>
@@ -2100,7 +2749,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
                                 <span class="text-[10px] font-black text-indigo-800">${d.pool || 0}</span>
                                 <span class="text-[7px] text-gray-400 font-bold uppercase">Piscine</span>
                             </div>
-                            <div class="flex flex-col items-center">
+                            <div onmouseenter="window.highlightCommerceOnMap('school', '🏫', 'Écoles')" onmouseleave="window.highlightCommerceOnMap(null)" class="flex flex-col items-center cursor-help p-1 hover:bg-white rounded-md transition-all">
                                 <span class="text-[10px] font-black text-indigo-800">${d.schoolsCount || 0}</span>
                                 <span class="text-[7px] text-gray-400 font-bold uppercase">Écoles</span>
                             </div>
@@ -2421,7 +3070,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
                 const info = d[t.id] || { count: 0, ips: null, is_in_commune: false };
                 const hasEst = info.count > 0;
                 return `
-                            <div class="relative flex items-center justify-between pl-14 group">
+                            <div onmouseenter="window.highlightCommerceOnMap('${t.id}', '${t.icon}', '${t.label}')" onmouseleave="window.highlightCommerceOnMap(null)" class="relative flex items-center justify-between pl-14 group cursor-help">
                                 <!-- Dot/Icon centered on the line -->
                                 <div class="absolute left-0 w-8 h-8 rounded-full ${hasEst ? t.color : 'bg-slate-50 border border-dashed border-slate-200'} flex items-center justify-center text-sm text-white shadow-xs z-10 transition-all group-hover:scale-105">
                                     ${hasEst ? t.icon : '<span class="grayscale opacity-20 text-[10px]">🏛️</span>'}
@@ -2473,6 +3122,17 @@ let geojsonLayer;
 let idfPrices = {};
 window.mobilityCache = null;
 
+function getResolvedJourney(rawCache) {
+    if (!rawCache) return null;
+    const key = window.commuteItineraryType || 'main';
+    // If it's the new structure { main, alternate }, return the preferred one (fallback to main)
+    if (rawCache.main || rawCache.alternate) {
+        return rawCache[key] || rawCache.main;
+    }
+    // Legacy structure: return as-is
+    return rawCache;
+}
+
 function refreshMobilityCache(geojsonData) {
     if (!geojsonData || !window.precomputedJourneysRaw) return;
     const start = performance.now();
@@ -2489,7 +3149,8 @@ function refreshMobilityCache(geojsonData) {
         if (window.activeWorkplaces?.length > 0) {
             let sumS = 0;
             window.activeWorkplaces.forEach(wp => {
-                const journey = window.precomputedJourneysRaw[insee]?.[wp.id];
+                const rawCache = window.precomputedJourneysRaw[insee]?.[wp.id];
+                const journey = getResolvedJourney(rawCache);
                 if (journey) {
                     const ratio = journey.duration / wp.limit;
                     let s = ratio <= 0.7 ? 100 : (ratio <= 1.0 ? 100 - ((ratio - 0.7) / 0.3) * 30 : Math.max(0, 70 - (ratio - 1) * 150));
@@ -2553,16 +3214,49 @@ window.getLineId = function (str) {
 };
 
 function getColor(matchRate) {
-    if (matchRate === 0) return '#ef4444';
-    return matchRate > 80 ? '#059669' : (matchRate > 65 ? '#22c55e' : (matchRate > 45 ? '#84cc16' : (matchRate > 25 ? '#facc15' : (matchRate > 10 ? '#f97316' : '#ef4444'))));
+    if (matchRate <= 0) return 'transparent';
+    return '#a855f7'; // Brand Purple only
 }
 
 function cleanName(name) {
     if (!name) return "";
+    // If format is "Commune (Iris Name)", extract "Iris Name"
+    const match = name.match(/.*\((.*)\)/);
+    if (match && match[1]) {
+        let n = match[1].trim();
+        // Skip cleaning if it's the "non irisée" notice
+        if (!n.toLowerCase().includes('non irisée')) return n;
+    }
     return name.replace(/\s*\(.*commune non irisée.*\)/gi, '').trim();
 }
 
 function calculateMatchRate(props) {
+    if (!props) return { total: 0, categories: {} };
+
+    // --- PARIS EXCLUSION ---
+    const insee = props.code || "";
+    if (insee.startsWith('75')) {
+        return { total: -2, isParis: true, categories: {}, exclusionReason: 'paris' };
+    }
+
+    let criteriaMultiplier = 1.0;
+    if (window.searchCriteria && window.searchCriteria.length > 0) {
+        for (const crit of window.searchCriteria) {
+            if (!evaluateCriterion(props, crit)) {
+                return { total: -1, excluded: true, categories: {}, exclusionReason: crit.property };
+            }
+            // Add a small boost for "extra" margin on some criteria
+            if (crit.property === 'budget') {
+                const typeKey = window.currentPropertyType || 'all';
+                const sector = props[typeKey] || props.all || props.prices || {};
+                const price = sector.price || sector.median || 5000;
+                const affSurface = crit.value / price;
+                if (affSurface > 100) criteriaMultiplier *= 1.1;
+                else if (affSurface < 40) criteriaMultiplier *= 0.8;
+            }
+        }
+    }
+
     // --- TRANSIT AXIS FILTER ---
     if (window.activeAxisId) {
         if (window.axisMembership && !window.axisMembership[props.code]) {
@@ -2591,7 +3285,6 @@ function calculateMatchRate(props) {
         const estimatedSurface = budget / median;
         const surfaceRatio = estimatedSurface / minSurface;
 
-        // Budget Fit: We want a neighborhood that matches our lifestyle/budget.
         // Perfect match if estimated surface is within requested range (-20% price to +5% price)
         // -20% price => 1.25x surface ratio
         // +5% price => 0.95x surface ratio
@@ -2699,12 +3392,21 @@ function calculateMatchRate(props) {
         };
 
         // 5. VIE DE QUARTIER (Merge of Services & Sorties)
-        const servicesScore = staticScores.services || 0;
-        const socialScore = staticScores.social || 0;
-        const vieQuartierScore = (servicesScore + socialScore) / 2;
+        // DYNAMIC OVERRIDE: Re-calculate counts to ensure accuracy (e.g. Bio stores in Vésinet)
+        // Increased radius to 2500m to catch nearby alternatives in spread-out areas
+        const dynamicCounts = window.countNearbyAmenities(insee, 2500);
+        const mergedCounts = { ...(props.counts || {}), ...dynamicCounts };
+        
+        const walkMeta = window.walkingMetadata?.[insee];
+        const dist = walkMeta?.distance_km || 2.0;
+        let proximityScore = 40;
+        if (dist < 0.2) proximityScore = 100;
+        else if (dist < 0.4) proximityScore = 85;
+        else if (dist < 1.2) proximityScore = 65;
+        const vieQuartierScore = proximityScore;
 
-        const pedCount = counts.pediatres || window.pediatresByIris?.[insee] || 0;
-        const socialCounts = counts;
+        const pedCount = mergedCounts.pediatres || window.pediatresByIris?.[insee] || 0;
+        const socialCounts = mergedCounts;
 
         // 6. ÉDUCATION
         const familyScore = staticScores.family || 0;
@@ -2756,7 +3458,7 @@ function calculateMatchRate(props) {
             mobility: { score: mobilityScore, label: "Mobilité", icon: "⚡", color: "text-blue-600" },
             commute: {
                 score: commuteScore,
-                label: "Temps de trajet",
+                label: "Trajets du quotidien",
                 icon: "🕒",
                 color: "text-indigo-600",
                 isHidden: !cachedMobility.hasWorkplaces
@@ -2865,7 +3567,7 @@ function calculateMatchRate(props) {
             mobility: ["Loin des gares", "Connecté", "Sur le métro", "Hub hyper-centre"],
             commute: ["Pénible", "Moyen", "Confortable", "Idéal"],
             urbanisme: ["Le Village Urbain", "Le Standing Patrimonial", "La Riviera (Bords de l'Eau)", "Le Coteau résidentiel", "Le Néo-Résidentiel", "Le Faubourg / Maison de Ville", "Le Pavillonnaire Familial"],
-            vieQuartier: ["Calme & Résid.", "Pratique & Paisible", "Commerçant & Animé", "Ultra-Animé & Festif"],
+            vieQuartier: ["Résidentiel excentré", "Résidentiel périphérique", "Résidentiel proximité directe", "Centre ville"],
             socio: ["Populaire", "Mixité sociale", "Aisé", "Très aisé"],
             demo: ["Jeune & Dynamique", "Familles & Actifs", "Résidentiel Mature", "Calme & Séniors"],
             safety: ["Vigilance", "Standard", "Serein", "Très sûr"],
@@ -2915,12 +3617,15 @@ function calculateMatchRate(props) {
                 case 'urbanisme':
                     app = props.segment_name || "Non segmenté";
                     break;
-                case 'vieQuartier':
-                    if (s < 30) app = "Calme & Résid.";
-                    else if (s < 60) app = "Pratique & Paisible";
-                    else if (s < 85) app = "Commerçant & Animé";
-                    else app = "Ultra-Animé & Festif";
+                case 'vieQuartier': {
+                    const walkMeta = window.walkingMetadata?.[insee];
+                    const dist = walkMeta?.distance_km || 2.0;
+                    if (dist < 0.2) app = "Centre ville";
+                    else if (dist < 0.4) app = "Résidentiel proximité directe";
+                    else if (dist < 1.2) app = "Résidentiel périphérique";
+                    else app = "Résidentiel excentré";
                     break;
+                }
 
                 case 'socio':
                     const income = props.demo?.income || 25000;
@@ -3009,13 +3714,13 @@ function calculateMatchRate(props) {
         );
 
         const baseScore = immoScore * 0.4 + neighborhoodScore * 0.6;
-        const total = isExcluded ? 0 : Math.round(baseScore * vibeRatio * preferenceMultiplier);
+        const total = Math.round(baseScore * vibeRatio * preferenceMultiplier * criteriaMultiplier);
 
         return {
             total: Math.min(100, total),
             vibeMatch: Math.round(vibeRatio * 100),
-            excluded: isExcluded,
-            reason: exclusionReason,
+            excluded: false,
+            reason: "",
             categories,
             details: {
                 immo: { fitScore, availability, surfaceScore, availabilityPct, availabilityScore, finalAvailabilityPct },
@@ -3047,64 +3752,42 @@ function calculateMatchRate(props) {
     }
 }
 
-let isVibeActiveCached = false;
-function style(feature) {
-    if (!feature) return { stroke: false, fillOpacity: 0, interactive: false };
-    const props = feature.properties || {};
-    const insee = props.code || feature.id;
+function isIrisVisible(insee, score, matchData, props) {
     let isVisible = true;
     let maxWait = 0;
 
-    // HIDE SCORE COLORING WHEN ZOOMED IN ON A FOCUS
-    // User request: "Once I've zoomed in on a neighborhood, I don't need the match score color coding anymore."
-    const zoom = window.map.getZoom();
-    const isZoomedIn = zoom >= 15;
-    const isSelected = selectedLayer && (selectedLayer.feature.properties.code === insee || selectedLayer.feature.id === insee);
-
-    if (isZoomedIn && selectedLayer) {
-        if (isSelected) {
-            return {
-                color: '#0f172a',
-                weight: 3,
-                opacity: 1,
-                fillColor: 'transparent',
-                fillOpacity: 0,
-                stroke: true,
-                interactive: true
-            };
-        } else {
-            return {
-                fillColor: 'transparent',
-                stroke: false,
-                fillOpacity: 0,
-                interactive: true
-            };
-        }
-    }
-
     if (window.activeWorkplaces && window.activeWorkplaces.length > 0) {
         for (const wp of window.activeWorkplaces) {
-            const cached = window.precomputedJourneysRaw?.[insee]?.[wp.id];
-            const duration = cached ? cached.duration : 999;
-            maxWait = Math.max(maxWait, duration);
-
-            if (duration > wp.limit * 1.1) isVisible = false;
-            if (cached && cached.itinerary) {
-                const usedModes = (cached.itinerary || []).map(step => (step.type || "").toLowerCase());
-                if (usedModes.some(m => !wp.modes.includes(m))) isVisible = false;
-            }
+            const rawCache = window.precomputedJourneysRaw?.[insee]?.[wp.id];
+            const cached = getResolvedJourney(rawCache);
             if (cached) {
-                const totalWalkMeters = (cached.firstMile || 0) + (cached.lastMile || 0);
-                if (totalWalkMeters / 83 > wp.walkLimit) isVisible = false;
+                const duration = cached.duration || 999;
+                maxWait = Math.max(maxWait, duration);
+                if (duration > wp.limit * 1.1) isVisible = false;
+
+                const breakdown = cached.sections || cached.itinerary || [];
+                if (breakdown.length > 0) {
+                    const usedModes = breakdown.map(step => (step.type || "").toLowerCase());
+                    const criticalModes = usedModes.filter(m => !['walking', 'street_network', 'waiting', 'transfer'].includes(m));
+                    if (criticalModes.some(m => !wp.modes.includes(m))) isVisible = false;
+                }
+
+                let walkDuration = 0;
+                if (cached.sections) {
+                    const first = cached.sections[0];
+                    const last = cached.sections[cached.sections.length - 1];
+                    if (first.type === 'walking' || first.type === 'street_network') walkDuration += first.duration;
+                    if (last.type === 'walking' || last.type === 'street_network') walkDuration += last.duration;
+                } else {
+                    walkDuration = (cached.firstMile || 0) + (cached.lastMile || 0);
+                }
+                if (walkDuration > wp.walkLimit) isVisible = false;
             }
         }
     }
 
-    if (feature.properties) feature.properties.maxCommuteTime = maxWait;
-    const matchData = calculateMatchRate(feature.properties);
-    const score = matchData.total;
+    if (props) props.maxCommuteTime = maxWait;
 
-    // Filter by score category
     let filterKey = 'bad';
     if (score > 80) filterKey = 'excellent';
     else if (score > 65) filterKey = 'good';
@@ -3112,37 +3795,72 @@ function style(feature) {
     else if (score > 25) filterKey = 'average';
     else if (score > 10) filterKey = 'poor';
 
+    if (matchData.isParis) return true;
     if (matchData.excluded) isVisible = false;
     if (window.activeScoreFilters && !window.activeScoreFilters[filterKey]) isVisible = false;
 
-    const isActiveCity = window.activeCommuneCodes && window.activeCommuneCodes.length > 0;
-    const isCityIris = isActiveCity && window.activeCommuneCodes.includes(String(insee));
+    return isVisible;
+}
+
+let isVibeActiveCached = false;
+function style(feature) {
+    if (!feature) return { stroke: false, fillOpacity: 0, interactive: false };
+    const props = feature.properties || {};
+    const insee = props.code || feature.id;
+
+    // --- SELECTION STYLE (TOP PRIORITY) ---
+    const isSelected = window.selectedLayer && 
+        (window.selectedLayer.feature === feature || 
+         (window.selectedLayer.feature.properties && window.selectedLayer.feature.properties.code === insee));
 
     if (isSelected) {
+        const score = calculateMatchRate(props).total;
         return {
-            color: '#0f172a',
-            weight: 3,
+            color: '#ffffff',
+            weight: 3, // Increased for stability
             opacity: 1,
+            dashArray: '',
             fillColor: getColor(score),
-            fillOpacity: 0.7,
-            stroke: true
+            fillOpacity: 0.8,
+            stroke: true,
+            interactive: true
         };
     }
 
-    // Selective coloring: if a city is active, only color its IRIS.
-    const isHoveredCity = window.hoveredCommuneName && getCommuneName(feature.properties, feature.id) === window.hoveredCommuneName;
+    // 1. Calculate Score & Visibility
+    const matchData = calculateMatchRate(props);
+    const score = matchData.total;
+    const isVisible = isIrisVisible(insee, score, matchData, props);
 
-    // Force visibility for hovered city to show its potential
-    if (isHoveredCity) isVisible = true;
+    // 2. Zoom State
+    const zoom = window.map.getZoom();
+    const isZoomedIn = zoom >= 14;
 
-    const showColor = isHoveredCity || isCityIris || (isVisible && !isActiveCity);
+    // 4. EXCLUSION & SPECIAL STATES
+    if (matchData.isParis) {
+        return {
+            fillColor: '#cbd5e1', // Light slate gray
+            fillOpacity: 0.1,    // Subtle presence
+            weight: 0,
+            stroke: false,
+            interactive: false
+        };
+    }
+
+    if (!isVisible && !isSelected) {
+        return { fillColor: 'transparent', stroke: false, fillOpacity: 0, interactive: false };
+    }
+
+    // Default opacity if visible: extreme nuance via non-linear scaling
+    let fillOpacity = Math.pow(score / 100, 2) * 0.8 + 0.02; // Nuanced curve: 0.02 to 0.82
+    if (score < 0) fillOpacity = 0.01;
+
+    // 5. Normal mode: Show colors based on match rate
 
     return {
-        fillColor: showColor ? getColor(score) : '#ffffff',
+        fillColor: getColor(score),
         stroke: false,
-        color: 'transparent',
-        weight: 0,
-        fillOpacity: showColor ? 0.55 : 0.05, // Increased slightly for click robustness
+        fillOpacity: fillOpacity,
         interactive: true
     };
 }
@@ -3155,8 +3873,9 @@ function highlightFeature(e) {
 
     // Highlight current IRIS with a clean white border
     layer.setStyle({
-        weight: 2,
+        weight: 1.5,
         color: '#ffffff',
+        dashArray: '3, 5',
         opacity: 0.9,
         stroke: true,
         fillOpacity: 0.85
@@ -3257,41 +3976,73 @@ async function selectFeature(e) {
             e.originalEvent._handledByFeature = true;
         }
 
-        if (selectedLayer === layer && !noZoom) {
+        if (window.selectedLayer === layer && !noZoom) {
             deselectFeature();
             return;
         }
 
         const props = layer.feature.properties;
-        const prevLayer = selectedLayer;
-        selectedLayer = layer;
+        const prevLayer = window.selectedLayer;
+        window.selectedLayer = layer;
 
         if (prevLayer) {
             prevLayer.setStyle(style(prevLayer.feature));
         }
 
         // Apply selection style
+        const score = calculateMatchRate(props).total;
         layer.setStyle({
-            weight: 4,
-            color: '#0f172a',
+            weight: 2.5,
+            color: '#ffffff',
+            dashArray: '',
             opacity: 1,
-            stroke: true,
-            fillOpacity: 0.65
+            fillColor: getColor(score),
+            fillOpacity: 0.8,
+            stroke: true
         });
         layer.bringToFront();
 
-        // Save view ONLY if it's a real user click, not an auto-selection on landing
-        if (!noZoom && !window.isFirstSearch && !e.isAuto) {
-            lastView = { center: map.getCenter(), zoom: map.getZoom() };
-
-            // Re-instantiate zoom logic: center on IRIS and zoom to level 14-15
-            const bounds = layer.getBounds();
-            map.flyToBounds(bounds, {
-                padding: [40, 40],
-                maxZoom: 15,
-                duration: 1.2,
-                easeLinearity: 0.25
-            });
+        // ZOOM LOGIC: Simplified & Centered for single left sidebar
+        if (!noZoom && !e.isAuto) {
+            const isCommuteMode = window.activeAccordion === 'commute';
+            
+            if (isCommuteMode) {
+                // Show the whole journey for the newly selected IRIS
+                const irisBounds = layer.getBounds();
+                const commuteCriteria = (window.searchCriteria || []).find(c => c.property === 'commute');
+                const hubId = commuteCriteria?.workplace || (window.activeWorkplaces?.[0]?.id) || 'bastille';
+                const hub = window.HUBS_COORDS?.[hubId];
+                
+                if (hub) {
+                    const journeyBounds = L.latLngBounds(irisBounds.getSouthWest(), irisBounds.getNorthEast());
+                    journeyBounds.extend(L.latLng(hub.lat, hub.lon));
+                    map.flyToBounds(journeyBounds, {
+                        paddingTopLeft: [420, 100],
+                        paddingBottomRight: [100, 100],
+                        maxZoom: 13,
+                        duration: 1.2
+                    });
+                    map.setMinZoom(11); // Allow more de-zoom to see the whole path
+                } else {
+                    map.flyToBounds(layer.getBounds(), {
+                        paddingTopLeft: [420, 80],
+                        paddingBottomRight: [100, 80],
+                        maxZoom: 15,
+                        duration: 1.2
+                    });
+                    map.setMinZoom(13.5);
+                }
+            } else {
+                // Normal neighborhood focus
+                map.flyToBounds(layer.getBounds(), {
+                    paddingTopLeft: [420, 80],
+                    paddingBottomRight: [100, 80],
+                    maxZoom: 15,
+                    duration: 1.2,
+                    easeLinearity: 0.2
+                });
+                map.setMinZoom(13.5);
+            }
         }
 
         await window.updateWalkingPath(props);
@@ -3306,18 +4057,61 @@ async function selectFeature(e) {
         }
 
         info.update(props, true);
-        if (window.renderActiveLayers) window.renderActiveLayers();
+        if (window.renderActiveLayers) window.renderActiveLayers(true);
         if (window.updateTopMatches) window.updateTopMatches();
 
     } catch (err) {
         console.error("❌ [selectFeature] Error:", err);
     }
-}
+};
+
+window.drawCityBoundaries = function(communeName) {
+    if (!window.allIrisData || !window.communeHighlightLayer) return;
+    window.communeHighlightLayer.clearLayers();
+    
+    const cityIris = window.allIrisData.features.filter(f => 
+        (f.properties.nom_com || f.properties.commune || "").toLowerCase() === communeName.toLowerCase()
+    );
+    
+    if (cityIris.length === 0) return;
+
+    // Style pour les frontières de la ville (Noir pour meilleur contraste)
+    const style = {
+        color: '#000000',
+        weight: 3,
+        dashArray: '8, 8',
+        fill: true,
+        fillColor: '#000000',
+        fillOpacity: 0.02,
+        opacity: 0.4,
+        interactive: false,
+        lineCap: 'round'
+    };
+
+    // Si Turf est disponible, on fusionne les IRIS pour n'avoir que le contour extérieur
+    if (typeof turf !== 'undefined' && cityIris.length > 1) {
+        try {
+            let merged = cityIris[0];
+            for (let i = 1; i < cityIris.length; i++) {
+                merged = turf.union(merged, cityIris[i]);
+            }
+            L.geoJSON(merged, { style: style }).addTo(window.communeHighlightLayer);
+            return;
+        } catch (e) {
+            console.warn("Turf union failed, using group fallback");
+        }
+    }
+
+    // Fallback : affichage de tous les IRIS de la ville
+    L.geoJSON({ type: "FeatureCollection", features: cityIris }, {
+        style: { ...style, weight: 1.5, opacity: 0.15 }
+    }).addTo(window.communeHighlightLayer);
+};
 
 function deselectFeature() {
-    if (selectedLayer) {
-        const prev = selectedLayer;
-        selectedLayer = null; // Clear state FIRST so style() returns 'not selected'
+    if (window.selectedLayer) {
+        const prev = window.selectedLayer;
+        window.selectedLayer = null; // Clear state FIRST so style() returns 'not selected'
 
         prev.setStyle({
             stroke: false,
@@ -3330,9 +4124,13 @@ function deselectFeature() {
         if (window.walkingPathsGroup) window.walkingPathsGroup.clearLayers();
         info.update();
         if (window.renderActiveLayers) window.renderActiveLayers();
-        if (lastView) {
-            map.flyTo(lastView.center, lastView.zoom, { duration: 0.8 });
-            lastView = null;
+
+        // Unlock de-zoom
+        map.setMinZoom(9);
+
+        // Simplified deselect: stay where we are or gentle zoom out if too close
+        if (map.getZoom() > 14) {
+            map.setZoom(13.5, { animate: true });
         }
     }
 
@@ -3385,7 +4183,10 @@ function onEachFeature(feature, layer) {
         air_quality: data.air_quality,
         air_label: data.air_label
     });
-    layer.on({ mouseover: highlightFeature, mouseout: resetHighlight, click: selectFeature });
+    const isParis = String(id).startsWith('75');
+    if (!isParis) {
+        layer.on({ mouseover: highlightFeature, mouseout: resetHighlight, click: selectFeature });
+    }
 }
 
 function updateProgress(percent, status) {
@@ -3482,7 +4283,8 @@ async function initApp() {
                         opacity: 0.8
                     };
                 },
-                pane: 'transitLinesPane'
+                pane: 'transitLinesPane',
+                renderer: window.transitRenderer
             });
         } catch (e) {
             console.error("❌ Data Fetch Error (Phase 1):", e);
@@ -3538,6 +4340,7 @@ async function initApp() {
         updateProgress(95, 'Finalisation...');
         idfPrices = pricesData;
         window.precomputedJourneysRaw = journeysData;
+        window.commuteItineraryType = 'main';
 
         // Lazy load detailed baked index in background
         fetch('/baked_index.json').then(r => r.json()).then(data => {
@@ -3616,7 +4419,8 @@ async function initApp() {
         geojsonLayer = L.geoJSON(geojsonData, {
             style: style,
             onEachFeature: onEachFeature,
-            pane: 'neighborhoods'
+            pane: 'neighborhoods',
+            renderer: window.neighborhoodsRenderer
         }).addTo(map);
         window.geojsonLayer = geojsonLayer;
         buildSearchIndex(geojsonData);
@@ -3645,6 +4449,7 @@ async function initApp() {
         window.rivieraLayer = L.layerGroup();
         window.centreVilleLayer = L.layerGroup().addTo(map);
         window.communeHighlightLayer = L.layerGroup().addTo(map);
+        window.commerceHighlightLayer = L.layerGroup().addTo(window.map);
 
         window.gpePointToLayer = (s, latlng) => {
             const primaryLine = s.lines[0];
@@ -3864,19 +4669,6 @@ async function initApp() {
                     iconAnchor: [14, 14]
                 }),
                 pane: 'poiPane'
-            }).bindPopup(`
-                <div class="p-3 min-w-[180px] font-sans">
-                    <div class="text-blue-600 text-[9px] font-black uppercase tracking-widest mb-0.5">Équipement Public</div>
-                    <div class="text-[14px] font-black text-gray-900 mb-1">${props.name}</div>
-                    <div class="text-[10px] text-gray-500 font-medium">Hôtel de ville / Mairie</div>
-                    <div class="mt-2 pt-2 border-t border-gray-100 flex items-center gap-2">
-                        <span class="text-xs text-gray-400">📍</span>
-                        <span class="text-[10px] text-gray-600">${props.name.includes('Mairie') ? props.name : 'Mairie de commune'}</span>
-                    </div>
-                </div>
-            `, {
-                className: 'premium-popup',
-                maxWidth: 300
             });
         };
 
@@ -4014,6 +4806,29 @@ function _updateFilters() {
     if (!window.geojsonLayer) return;
     console.log("⚡ Refreshing map filters...");
 
+    // Sync activeWorkplaces with Criteria Builder 'commute' criteria
+    if (window.searchCriteria) {
+        const commuteCriteria = window.searchCriteria.filter(c => c.property === 'commute');
+        if (commuteCriteria.length > 0) {
+            window.activeWorkplaces = commuteCriteria.map(c => ({
+                id: c.workplace || 'bastille',
+                limit: c.value || 45,
+                walkLimit: 20, // Default walk limit
+                modes: ['metro', 'rer', 'train', 'bus', 'tram'] // Default modes
+            }));
+        } else {
+            // If no commute criteria, we don't clear it yet to avoid breaking 
+            // the separate "Lieux de travail" modal if it's being used, 
+            // but for the dashboard it's better to stay in sync.
+            // window.activeWorkplaces = []; 
+        }
+    }
+
+    // Always refresh mobility cache if we have geojson layer
+    if (window.refreshMobilityCache && window.geojsonLayer) {
+        window.refreshMobilityCache(window.geojsonLayer.toGeoJSON());
+    }
+
     isVibeActiveCached = !!document.querySelector('.vibe-chip.active');
     if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
 
@@ -4027,8 +4842,7 @@ function _updateFilters() {
             updateTopMatches();
         }, 300);
 
-        if (window.updateEspacesVertsVisibility) window.updateEspacesVertsVisibility();
-        if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
+        if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
         if (window.updateGPELinesVisibility) window.updateGPELinesVisibility();
     });
 }
@@ -4065,19 +4879,31 @@ window.updateNoiseVisibility = async () => {
             style: (f) => ({
                 color: f.properties.weight > 5 ? '#ef4444' : '#fb923c', // Rouge si fort, Orange si faible
                 weight: f.properties.weight * 1.5,
-                opacity: 0.4
+                opacity: 0.4,
+                renderer: noiseRenderer
             }),
             interactive: false
         });
         noiseInfraLayerBase.addLayer(layer);
     }
 
-    // 2. Affichage instantané
     if (show && noiseInfraLayerBase && !window.map.hasLayer(noiseInfraLayerBase)) {
         window.map.addLayer(noiseInfraLayerBase);
     } else if (!show && noiseInfraLayerBase && window.map.hasLayer(noiseInfraLayerBase)) {
         window.map.removeLayer(noiseInfraLayerBase);
     }
+};
+
+window.updateAirQualityVisibility = () => {
+    updateFilters();
+};
+
+window.updatePediatresVisibility = () => {
+    renderActiveLayers();
+};
+
+window.updateMairiesVisibility = () => {
+    renderActiveLayers();
 };
 
 window.updatePEBVisibility = async () => {
@@ -4098,7 +4924,8 @@ window.updatePEBVisibility = async () => {
                     weight: 1.5,
                     color: colors[zone],
                     opacity: 0.7,
-                    interactive: false
+                    interactive: false,
+                    renderer: window.pebRenderer
                 },
                 pane: 'noisePane'
             }).addTo(window.pebLayer);
@@ -4110,201 +4937,117 @@ window.updatePEBVisibility = async () => {
     }
 };
 
-async function fetchPEBGeometries() {
-    if (window.pebData) return;
-    try {
-        const pebZones = ['za', 'zb', 'zc', 'zd'];
-        const data = {};
-        for (const zone of pebZones) {
-            const res = await fetch(`/peb_${zone}_4326.geojson`);
-            if (res.ok) data[zone] = await res.json();
-        }
-        window.pebData = data;
-        // If the toggle was already on, update visibility now that data is here
-        if (document.getElementById('show-peb')?.checked) window.updatePEBVisibility();
-    } catch (e) {
-        console.error("Failed to load PEB geometries:", e);
-    }
-}
-
-window.updateHeatResilienceVisibility = () => {
-    updateFilters();
-};
-
-window.updateAirQualityVisibility = () => {
-    updateFilters();
-};
-
-window.updatePediatresVisibility = () => {
-    renderActiveLayers();
-};
-
-window.updateMairiesVisibility = () => {
-    renderActiveLayers();
-};
-
-let cityCentersCachedLayer = null;
-
 window.updateCentreVilleVisibility = async () => {
     const show = document.getElementById('show-centre-ville')?.checked;
     const legend = document.getElementById('city-centers-legend');
 
-    // 1. Gestion de la légende
+    if (!window.centreVilleLayer) {
+        window.centreVilleLayer = L.layerGroup().addTo(window.map);
+    }
+    window.centreVilleLayer.clearLayers();
+    
+    // Always show legend if checked, regardless of walking paths
     if (legend) {
         if (show) legend.classList.remove('hidden');
         else legend.classList.add('hidden');
     }
-
-    // 2. Initialisation du calque
-    if (!window.centreVilleLayer) {
-        window.centreVilleLayer = L.layerGroup().addTo(window.map);
-    }
-
-    window.centreVilleLayer.clearLayers();
-
-    // 3. Verrous de visibilité (Checkbox et Zoom)
+    
     if (!show) return;
 
     const zoom = window.map.getZoom();
-    if (zoom < 11) return; // Ne rien afficher si on est trop dézoomé
-
-    const isSimplified = zoom < 14;
+    if (zoom < 11) return;
     const bounds = window.map.getBounds();
+    const hasWalkingPaths = window.activeWalkingPaths && window.activeWalkingPaths.length > 0;
 
-    // 4. Styles visuels par catégorie
     const personaStyles = {
-        "Pôle de Mobilité": { color: '#8b5cf6', fill: '#a78bfa', icon: '🚉' },
-        "Cœur Historique": { color: '#f59e0b', fill: '#fbbf24', icon: '🏺' },
-        "Axe Commerçant": { color: '#ea580c', fill: '#fb923c', icon: '🛍️' },
-        "Quartier Culturel": { color: '#ec4899', fill: '#f472b6', icon: '🎭' },
-        "Pôle de Vie": { color: '#10b981', fill: '#34d399', icon: '🌱' }
+        "Pôle de Mobilité": { color: '#8b5cf6', icon: '🚉' },
+        "Cœur Historique": { color: '#f59e0b', icon: '🏺' },
+        "Axe Commerçant": { color: '#ea580c', icon: '🛍️' },
+        "Quartier Culturel": { color: '#ec4899', icon: '🎭' },
+        "Pôle de Vie": { color: '#10b981', icon: '🌱' }
     };
 
-    // 5. Boucle sur les données
     (window.cityCentersData.features || []).forEach(feature => {
         const props = feature.properties;
-
         try {
-            // CALCUL SPATIAL : On récupère le centre pour savoir s'il est à l'écran
             const centroid = turf.centroid(feature).geometry.coordinates;
             const latlng = [centroid[1], centroid[0]];
-
-            // OPTIMISATION : On ne dessine que ce qui est visible sur la carte actuelle
             if (!bounds.contains(latlng)) return;
 
             const s = personaStyles[props.persona] || personaStyles["Pôle de Vie"];
 
-            // A. DESSIN DE LA FRONTIÈRE (Polygone)
-            if (zoom >= 13) {
+            // ALWAYS show the perimeter (Essential Context)
+            if (zoom >= 12) {
                 L.geoJSON(feature, {
                     pane: 'cityCentersPane',
+                    renderer: window.cityCentersRenderer,
                     interactive: false,
                     style: {
                         color: s.color,
-                        weight: isSimplified ? 1 : 3,
-                        opacity: isSimplified ? 0.4 : 0.8,
-                        fillColor: s.fill,
-                        fillOpacity: isSimplified ? 0.05 : 0.2,
+                        weight: 2,
+                        opacity: 0.4,
+                        fillColor: s.color,
+                        fillOpacity: 0.05,
                         dashArray: '6, 6'
                     }
                 }).addTo(window.centreVilleLayer);
             }
 
-            // B. PRÉPARATION DES PILLS (Rosace)
-            const pills = [
-                { key: 'boulangerie_count', icon: '🍞', label: 'Boulangerie' },
-                { key: 'boucherie_count', icon: '🥩', label: 'Boucherie' },
-                { key: 'fromagerie_count', icon: '🧀', label: 'Fromagerie' },
-                { key: 'has_market', icon: '🥬', label: 'Marché' },
-                { key: 'picard_count', icon: '❄️', label: 'Picard' },
-                { key: 'deli_count', icon: '🥗', label: 'Traiteur/Fine' },
-                { key: 'restaurant_count', icon: '🍴', label: 'Resto/Bar' },
-                { key: 'culture_count', icon: '🎭', label: 'Culture' },
-                { key: 'pharmacie_count', icon: '💊', label: 'Santé' },
-                { key: 'bio_count', icon: 'AB', label: 'Bio' },
-                { key: 'shopping_count', icon: '🛍️', label: 'Shopping' },
-                { key: 'supermarket_count', icon: '🛒', label: 'Supermarché' }
-            ];
+            // ONLY show the static marker if NO interactive walking paths are showing
+            if (!hasWalkingPaths) {
+                const marker = L.marker(latlng, {
+                    icon: L.divIcon({
+                        className: 'city-center-marker',
+                        html: `
+                            <div class="city-center-marker-container" style="position: relative;">
+                                <div class="center-main-icon" style="
+                                    background: white;
+                                    color: ${s.color};
+                                    width: 28px; height: 28px;
+                                    border-radius: 50%;
+                                    display: flex; align-items: center; justify-content: center;
+                                    font-size: 16px;
+                                    border: 2.5px solid ${s.color};
+                                    box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+                                ">${s.icon}</div>
+                            </div>
+                        `,
+                        iconSize: [28, 28],
+                        iconAnchor: [14, 14]
+                    }),
+                    interactive: true,
+                    pane: 'cityCentersPane'
+                }).addTo(window.centreVilleLayer);
 
-            const radius = 68;
-            const pillsHtml = pills.map((p, i) => {
-                const angle = (i * 360 / pills.length) - 90;
-                const radian = angle * Math.PI / 180;
-                const tx = Math.cos(radian) * radius;
-                const ty = Math.sin(radian) * radius;
-                const isPresent = props[p.key] > 0 || props[p.key] === true;
-
-                let iconHtml = p.icon;
-                if (p.icon === 'AB') {
-                    iconHtml = `
-                        <svg viewBox="0 0 100 100" style="width: 22px; height: 22px; border-radius: 3px;" xmlns="http://www.w3.org/2000/svg">
-                            <rect width="100" height="100" fill="#2E9E47" rx="15"/>
-                            <text x="50" y="70" font-family="Arial, sans-serif" font-size="60" fill="white" text-anchor="middle" font-weight="900">AB</text>
-                        </svg>
-                    `;
-                }
-
-                const excellenceKey = p.key.replace('_count', '_excellence').replace('has_', 'excellence_');
-                const isExcellence = props[excellenceKey] === true;
-
-                return `
-                    <div class="city-center-pill ${isPresent ? 'present' : 'absent'} ${isExcellence ? 'excellence' : ''}" 
-                         style="--tx: ${tx.toFixed(1)}px; --ty: ${ty.toFixed(1)}px;" 
-                         data-label="${p.label}">
-                        ${iconHtml}
+                marker.bindPopup(`
+                    <div class="p-3">
+                        <div class="text-[10px] font-black uppercase tracking-widest mb-1" style="color: ${s.color}">${props.persona || 'Pôle de Vie'}</div>
+                        <div class="text-[15px] font-black text-gray-900 mb-1">${props.name}</div>
+                        <div class="text-[11px] text-gray-500 font-medium">${props.description || 'Centre d\'activité local'}</div>
                     </div>
-                `;
-            }).join('');
+                `, { maxWidth: 300 });
 
-            // C. CRÉATION DU MARQUEUR INTERACTIF
-            const marker = L.marker(latlng, {
-                pane: 'cityCentersPane',
-                icon: L.divIcon({
-                    className: `city-center-marker ${isSimplified ? 'simplified' : ''}`,
-                    html: `
-                        <div class="city-center-marker-container ${isSimplified ? 'simplified' : ''}">
-                            ${!isSimplified ? `
-                            <div class="city-center-label-card">
-                                <div class="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">${props.persona}</div>
-                                <div class="text-[14px] font-black text-gray-900 leading-tight">${props.name}</div>
-                            </div>
-                            ` : ''}
-                            <div class="city-center-main-icon">
-                                ${s.icon}
-                            </div>
-                            ${!isSimplified ? `
-                            <div class="city-center-pills-wrapper">
-                                ${pillsHtml}
-                            </div>
-                            ` : ''}
-                        </div>
-                    `,
-                    iconSize: [0, 0]
-                })
-            }).addTo(window.centreVilleLayer);
-
-            // D. ÉVÉNEMENTS (Hover & Clic)
-            marker.on('mouseover', () => {
-                const path = window.activeWalkingPaths?.find(p => p.name === props.name);
-                if (path) window.highlightPath(path.id, true);
-            });
-
-            marker.on('mouseout', () => {
-                const path = window.activeWalkingPaths?.find(p => p.name === props.name);
-                if (path) window.highlightPath(path.id, false);
-            });
-
-            marker.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                const el = marker.getElement().querySelector('.city-center-marker-container');
-
-                // On ferme les autres avant d'ouvrir celui-ci
-                document.querySelectorAll('.city-center-marker-container.active').forEach(c => {
-                    if (c !== el) c.classList.remove('active');
+                marker.on('mouseover', () => {
+                    const path = window.activeWalkingPaths?.find(p => p.name === props.name);
+                    if (path) window.highlightPath(path.id, true);
+                });
+                marker.on('mouseout', () => {
+                    const path = window.activeWalkingPaths?.find(p => p.name === props.name);
+                    if (path) window.highlightPath(path.id, false);
                 });
 
-                el.classList.toggle('active');
-            });
+                marker.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    const el = marker.getElement().querySelector('.city-center-marker-container');
+
+                    // On ferme les autres avant d'ouvrir celui-ci
+                    document.querySelectorAll('.city-center-marker-container.active').forEach(c => {
+                        if (c !== el) c.classList.remove('active');
+                    });
+
+                    el.classList.toggle('active');
+                });
+            }
 
         } catch (e) {
             console.warn("Erreur de rendu pour le pôle :", props.name, e);
@@ -4345,7 +5088,7 @@ function getVisibleInseeCodes() {
     return Array.from(visible);
 }
 
-function renderActiveLayers() {
+function renderActiveLayers(skipStyleRefresh = false) {
     if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
     if (!window.map || !window.prebuiltMarkers) return;
 
@@ -4398,14 +5141,26 @@ function renderActiveLayers() {
     window.mairiesLayer.clearLayers();
     window.rivieraLayer.clearLayers();
     window.gpeLayer.clearLayers();
+    
+    // Explicitly clear city centers if walking paths are active to avoid "ghost" markers
+    const hasWalkingPaths = window.activeWalkingPaths && window.activeWalkingPaths.length > 0;
+    if (hasWalkingPaths && window.centreVilleLayer) {
+        window.centreVilleLayer.clearLayers();
+    }
 
     // Si on est trop dézoomé, on s'arrête là (sauf si une ville est sélectionnée)
     if (zoom < 13 && !isActiveCity) { // <--- ICI on passe à 13
         if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
-        if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
+        
+        const hasWalkingPaths = window.activeWalkingPaths && window.activeWalkingPaths.length > 0;
+        if (window.updateCentreVilleVisibility) {
+            if (hasWalkingPaths) window.centreVilleLayer.clearLayers();
+            else window.updateCentreVilleVisibility();
+        }
         if (window.updateWalkingLabelsZoom) window.updateWalkingLabelsZoom();
 
-        if (zoom < 12 && window.walkingPathsGroup) {
+        if (zoom < 10 && window.walkingPathsGroup) {
+            // Only clear at very low zoom to avoid flickering during transitions
             window.walkingPathsGroup.clearLayers();
         }
         return;
@@ -4490,9 +5245,24 @@ function renderActiveLayers() {
         if (!irisMarkers) return;
 
         // Points simples
-        if (toggles.stations && irisMarkers.stations) irisMarkers.stations.forEach(m => window.stationsLayer.addLayer(m));
-        if (toggles.schools && irisMarkers.schools) irisMarkers.schools.forEach(m => window.schoolsLayer.addLayer(m));
-        if (toggles.marche && irisMarkers.marche) irisMarkers.marche.forEach(m => window.marcheLayer.addLayer(m));
+        if (toggles.stations && irisMarkers.stations) {
+            const hasStationPaths = window.activeWalkingPaths?.some(p => p.type === 'station');
+            if (!hasStationPaths) {
+                irisMarkers.stations.forEach(m => window.stationsLayer.addLayer(m));
+            }
+        }
+        if (toggles.schools && irisMarkers.schools) {
+            const hasSchoolPaths = window.activeWalkingPaths?.some(p => p.type === 'school');
+            if (!hasSchoolPaths) {
+                irisMarkers.schools.forEach(m => window.schoolsLayer.addLayer(m));
+            }
+        }
+        if (toggles.marche && irisMarkers.marche) {
+            irisMarkers.marche.forEach(m => {
+                if (m._isInPole) return;
+                window.marcheLayer.addLayer(m);
+            });
+        }
         if (toggles.riviera && irisMarkers.riviera) irisMarkers.riviera.forEach(m => window.rivieraLayer.addLayer(m));
         if (toggles.pediatres && irisMarkers.pediatres) irisMarkers.pediatres.forEach(m => window.pediatresLayer.addLayer(m));
 
@@ -4518,6 +5288,10 @@ function renderActiveLayers() {
                     if (activeCommerces.includes('picard') && isPicardProp) allowed = true;
                 }
 
+                if (allowed && m._isInPole) {
+                    allowed = false;
+                }
+
                 if (allowed) window.commercesLayer.addLayer(m);
             });
         }
@@ -4536,9 +5310,9 @@ function renderActiveLayers() {
                 return allowed;
             };
 
-            if (irisMarkers.amenities) irisMarkers.amenities.forEach(m => { if (filterAmenity(m)) window.amenitiesLayer.addLayer(m); });
-            if (irisMarkers.sport) irisMarkers.sport.forEach(m => { if (filterAmenity(m)) window.sportLayer.addLayer(m); });
-            if (irisMarkers.culture) irisMarkers.culture.forEach(m => { if (filterAmenity(m)) window.cultureLayer.addLayer(m); });
+            if (irisMarkers.amenities) irisMarkers.amenities.forEach(m => { if (filterAmenity(m) && !m._isInPole) window.amenitiesLayer.addLayer(m); });
+            if (irisMarkers.sport) irisMarkers.sport.forEach(m => { if (filterAmenity(m) && !m._isInPole) window.sportLayer.addLayer(m); });
+            if (irisMarkers.culture) irisMarkers.culture.forEach(m => { if (filterAmenity(m) && !m._isInPole) window.cultureLayer.addLayer(m); });
         }
 
         // Fallback Pédiatres si non présents dans prebuiltMarkers mais présents dans pediatresIndex
@@ -4603,7 +5377,7 @@ function renderActiveLayers() {
     if (window.updateWalkingLabelsZoom) window.updateWalkingLabelsZoom();
 
     // Rafraichir le style des IRIS (important pour le zoom check du stroke blanc)
-    if (window.geojsonLayer) {
+    if (window.geojsonLayer && !skipStyleRefresh) {
         window.geojsonLayer.setStyle(style);
     }
 }
@@ -4848,7 +5622,8 @@ window.updateQPVVisibility = async () => {
                         weight: 2,
                         fillColor: '#f97316',
                         fillOpacity: 0.25,
-                        dashArray: '5 5'
+                        dashArray: '5 5',
+                        renderer: window.topRenderer
                     },
                     interactive: false,
                     pane: 'topPane'
@@ -4889,7 +5664,8 @@ window.updateZSPVisibility = async () => {
                         weight: 2,
                         fillColor: '#991b1b',
                         fillOpacity: 0.2,
-                        dashArray: '3 6'
+                        dashArray: '3 6',
+                        renderer: window.topRenderer
                     },
                     interactive: false,
                     pane: 'topPane'
@@ -5201,7 +5977,8 @@ window.updateEspacesVertsVisibility = async () => {
                     fillOpacity: 0.4,
                     color: '#064e3b',
                     weight: 0.5,
-                    opacity: 0.8
+                    opacity: 0.8,
+                    renderer: window.natureRenderer
                 },
                 pane: 'naturePane',
                 interactive: false
@@ -5265,6 +6042,7 @@ window.updateOSMContextVisibility = async () => {
                     return { color: '#ccc', weight: 1 };
                 },
                 pane: 'naturePane',
+                renderer: window.natureRenderer,
                 interactive: false
             });
         }
@@ -5487,53 +6265,17 @@ function updateTopMatches() {
         const insee = f.properties.code || f.id;
         const matchData = calculateMatchRate(f.properties);
         const score = matchData.total;
+        const isVisible = isIrisVisible(insee, score, matchData, f.properties);
 
-        if (score >= 0 && !matchData.excluded) {
-            let isVisible = true;
-            let maxWait = 0;
-
-            // Replicate commute and filter logic to only list visible matched IRIS
-            if (window.activeWorkplaces && window.activeWorkplaces.length > 0) {
-                for (const wp of window.activeWorkplaces) {
-                    const cached = window.precomputedJourneysRaw?.[insee]?.[wp.id];
-                    const duration = cached ? cached.duration : 999;
-                    maxWait = Math.max(maxWait, duration);
-
-                    if (duration > wp.limit * 1.1) {
-                        isVisible = false;
-                    }
-                    if (cached && cached.itinerary) {
-                        const usedModes = (cached.itinerary || []).map(step => (step.type || "").toLowerCase());
-                        const hasForbiddenMode = usedModes.some(m => !wp.modes.includes(m));
-                        if (hasForbiddenMode) isVisible = false;
-                    }
-                    if (cached) {
-                        const totalWalkMeters = (cached.firstMile || 0) + (cached.lastMile || 0);
-                        const walkTimeMin = totalWalkMeters / 83;
-                        if (walkTimeMin > wp.walkLimit) isVisible = false;
-                    }
-                }
-            }
-
-            let filterKey = 'bad';
-            if (score > 80) filterKey = 'excellent';
-            else if (score > 65) filterKey = 'good';
-            else if (score > 45) filterKey = 'decent';
-            else if (score > 25) filterKey = 'average';
-            else if (score > 10) filterKey = 'poor';
-
-            if (window.activeScoreFilters && !window.activeScoreFilters[filterKey]) isVisible = false;
-
-            if (isVisible) {
-                validIris.push({
-                    feature: f,
-                    score: score,
-                    matchData: matchData,
-                    name: f.properties.nom || getCommuneName(f.properties),
-                    communeName: getCommuneName(f.properties),
-                    code: insee
-                });
-            }
+        if (score >= 0 && isVisible) {
+            validIris.push({
+                feature: f,
+                score: score,
+                matchData: matchData,
+                name: f.properties.nom || getCommuneName(f.properties),
+                communeName: getCommuneName(f.properties),
+                code: insee
+            });
         }
     });
 
@@ -5552,15 +6294,23 @@ function updateTopMatches() {
     const irisSignature = window.topNeighborhoods.map(i => `${i.code}-${i.score}`).join('|');
     if (window._lastIrisSignature === irisSignature) return;
     window._lastIrisSignature = irisSignature;
-
-    if (window.topNeighborhoods.length === 0) {
-        if (container) container.innerHTML = '<div class="p-8 text-center text-gray-400 text-xs italic">Aucun quartier ne correspond à votre recherche ou à vos critères.</div>';
-        if (content) content.classList.remove('hidden');
-        return;
+    // Only show ranking if no IRIS is selected
+    const isIrisSelected = !!window.selectedLayer;
+    if (content) {
+        if (isIrisSelected) {
+            content.classList.add('view-hidden');
+        } else {
+            // Only remove if not in modal mode (where prefs are shown)
+            const isModal = document.getElementById('ui-panel')?.classList.contains('modal-mode');
+            if (!isModal) content.classList.remove('view-hidden');
+        }
     }
 
-    if (content) content.classList.remove('hidden');
     if (container) {
+        if (window.topNeighborhoods.length === 0) {
+            container.innerHTML = '<div class="p-8 text-center text-gray-400 text-xs italic">Aucun quartier ne correspond à votre recherche ou à vos critères.</div>';
+            return;
+        }
         let axisHeader = '';
         if (window.activeAxisId) {
             const hubId = document.getElementById('axis-hub-selector')?.value || 'bastille';
@@ -5639,71 +6389,41 @@ window.drawCityBoundaries = function (communeName) {
 
     window.activeCommuneName = communeName;
 
-    // Refresh coloring of all neighborhoods to reflect new active city
+    // Refresh coloring of all neighborhoods
     if (window.geojsonLayer) window.geojsonLayer.setStyle(style);
 
-    // Collect features from geojsonData using the same commune name extraction logic
-    const cityFeatures = [];
-    if (window.allNeighborhoods) {
-        window.allNeighborhoods.forEach(f => {
-            if (getCommuneName(f.properties, f.id || f.properties.code) === communeName) {
-                cityFeatures.push(f);
-            }
-        });
-    }
-
-    if (cityFeatures && cityFeatures.length > 0) {
-        try {
-            // HYPER-RESILIENT UNION with Gap Bridging
-            let merged = null;
-
-            // Step 1: Incremental union with tiny buffer to bridge gaps
-            cityFeatures.forEach((feature, i) => {
-                try {
-                    // Buffer(0.00001) to bridge microscopic topological gaps
-                    const buffered = turf.buffer(feature, 0.0001, { units: 'kilometers' });
-
-                    if (!merged) {
-                        merged = buffered;
-                    } else {
-                        const nextMerged = turf.union(merged, buffered);
-                        if (nextMerged) {
-                            merged = nextMerged;
-                        }
-                    }
-                } catch (err) {
-                    console.warn(`⚠️ Union failed for IRIS ${i}, skipping...`, err);
+    // DRAW CITY BOUNDARY
+    try {
+        const cityFeatures = [];
+        if (window.allNeighborhoods) {
+            window.allNeighborhoods.forEach(f => {
+                if (getCommuneName(f.properties, f.id || f.properties.code) === communeName) {
+                    cityFeatures.push(f);
                 }
             });
+        }
 
-            // Step 2: Buffer back to original size (approx)
-            if (merged) {
-                try {
-                    merged = turf.buffer(merged, -0.0001, { units: 'kilometers' }) || merged;
-                } catch (e) {
-                    console.warn("Buffer back failed", e);
-                }
+        if (cityFeatures.length > 0 && typeof turf !== 'undefined') {
+            let unioned = cityFeatures[0];
+            for (let i = 1; i < cityFeatures.length; i++) {
+                unioned = turf.union(unioned, cityFeatures[i]);
             }
 
-            if (merged) {
-                console.log(`✅ Drawing hyper-resilient boundary for ${communeName}`);
-                L.geoJSON(merged, {
-                    pane: 'topPane',
+            if (unioned) {
+                L.geoJSON(unioned, {
                     style: {
-                        color: '#1e293b',
-                        weight: 6,
-                        opacity: 1,
-                        fillOpacity: 0,
-                        interactive: false,
-                        className: 'commune-boundary-highlight'
+                        color: '#94a3b8',
+                        weight: 1,
+                        dashArray: '4, 6',
+                        fill: false,
+                        opacity: 0.6,
+                        interactive: false
                     }
                 }).addTo(window.communeHighlightLayer);
-            } else {
-                console.error(`❌ Total failure to create boundary for ${communeName}`);
             }
-        } catch (e) {
-            console.error("Critical error in drawCityBoundaries", e);
         }
+    } catch (e) {
+        console.warn("Could not draw city boundaries:", e);
     }
 
     // Show City Badge
@@ -6041,6 +6761,14 @@ window.buildAllMarkersOnce = function () {
                     marker._isBio = f.properties.is_biocoop || f.properties.is_naturalia || (f.properties.name || '').toLowerCase().includes('bio');
                     marker._isPicard = f.properties.is_picard || (f.properties.name || '').toLowerCase().includes('picard');
 
+                    // PRE-CALCULATE SPATIAL STATUS (Optimization)
+                    if (window.cityCentersData && typeof turf !== 'undefined') {
+                        const point = turf.point([latlng[1], latlng[0]]);
+                        marker._isInPole = window.cityCentersData.features.some(f => turf.booleanPointInPolygon(point, f));
+                    } else {
+                        marker._isInPole = false;
+                    }
+
                     window.prebuiltMarkers[insee][key].push(marker);
                 }
             });
@@ -6060,3 +6788,243 @@ window.buildAllMarkersOnce = function () {
 
     console.timeEnd("Création des marqueurs Leaflet en mémoire");
 };
+
+// --- MODULAR CRITERIA BUILDER ---
+class CriteriaBuilder {
+    constructor() {
+        this.criteria = [];
+        this._container = null;
+        this.properties = {
+            'type': { label: 'Type de Bien', icon: '🏠', operators: ['est'], options: ['Maison', 'Appartement'] },
+            'jardin': { label: 'Jardin', icon: '🌳', operators: ['est'], options: ['Oui', 'Non'] },
+            'surface': { label: 'Surface min', icon: '📏', operators: ['>'], options: ['0-40m²', '40-60m²', '60-80m²', '80-100m²', '100-120m²', '120m²+'] },
+            'budget': { label: 'Budget max', icon: '💰', operators: ['<'], unit: '€' },
+            'commute': { label: 'Trajet', icon: '🕒', operators: ['<'], unit: 'min' },
+            'vibe': {
+                label: 'Ambiance', icon: '✨', operators: ['est'], options: [
+                    'Le Village Urbain', 'Le Standing Patrimonial', 'La Riviera (Bords de l\'Eau)',
+                    'Le Coteau résidentiel', 'Le Néo-Résidentiel', 'Le Faubourg / Maison de Ville', 'Le Pavillonnaire Familial'
+                ]
+            }
+        };
+
+        // Add default criteria based on user preference
+        setTimeout(() => {
+            if (this.criteria.length === 0) {
+                // 1. Maison
+                this.addCriterion('type');
+                this.updateCriterion(this.criteria[this.criteria.length - 1].id, 'value', 'Maison');
+                
+                // 2. 120m2+
+                this.addCriterion('surface');
+                this.updateCriterion(this.criteria[this.criteria.length - 1].id, 'value', '120m²+');
+
+                // 3. Jardin: Oui
+                this.addCriterion('jardin');
+                this.updateCriterion(this.criteria[this.criteria.length - 1].id, 'value', 'Oui');
+
+                // 4. Budget: 850,000€
+                this.addCriterion('budget');
+                this.updateCriterion(this.criteria[this.criteria.length - 1].id, 'value', 850000);
+
+                // 5. Trajet: Bastille < 40 min
+                this.addCriterion('commute');
+                const commuteId = this.criteria[this.criteria.length - 1].id;
+                this.updateCriterion(commuteId, 'workplace', 'bastille');
+                this.updateCriterion(commuteId, 'value', 40);
+            }
+        }, 500);
+    }
+
+    addCriterion(property = 'budget') {
+        const id = Date.now() + Math.random().toString(36).substr(2, 9);
+        const config = this.properties[property];
+        const criterion = {
+            id,
+            property,
+            operator: config.operators[0],
+            value: config.options ? config.options[0] : (property === 'budget' ? 850000 : 100)
+        };
+
+        if (property === 'commute') {
+            criterion.workplace = 'bastille';
+            criterion.value = 45;
+        }
+
+        this.criteria.push(criterion);
+        this.render();
+        window.searchCriteria = this.criteria;
+        window.updateFilters();
+    }
+
+    removeCriterion(id) {
+        this.criteria = this.criteria.filter(c => c.id !== id);
+        this.render();
+        window.searchCriteria = this.criteria;
+        window.updateFilters();
+    }
+
+    updateCriterion(id, field, value) {
+        const crit = this.criteria.find(c => c.id === id);
+        if (crit) {
+            crit[field] = value;
+            if (field === 'property') {
+                const config = this.properties[value];
+                crit.operator = config.operators[0];
+                crit.value = config.options ? config.options[0] : (value === 'budget' ? 850000 : (value === 'surface' ? 100 : 45));
+                if (value === 'commute') {
+                    crit.workplace = 'bastille';
+                    crit.value = 45;
+                }
+            }
+
+            if (crit.property === 'type' && (field === 'value' || field === 'property')) {
+                window.currentPropertyType = (crit.value === 'Maison') ? 'house' : 'apt';
+            }
+
+            // Sync Garden filter with Criteria Builder
+            if (crit.property === 'jardin' && (field === 'value' || field === 'property')) {
+                const gardenCheckbox = document.getElementById('garden-filter');
+                if (gardenCheckbox) gardenCheckbox.checked = (crit.value === 'Oui');
+            }
+
+            window.searchCriteria = this.criteria;
+            window.updateFilters();
+            this.render();
+        }
+    }
+
+    get container() {
+        if (!this._container) this._container = document.getElementById('criteria-container');
+        return this._container;
+    }
+
+    render() {
+        const container = this.container;
+        if (!container) return;
+
+        const icons = {
+            budget: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="13" r="7" fill="#fef08a"/><circle cx="11" cy="11" r="7" stroke="#0d1c40" stroke-width="2" fill="white"/><path d="M13 9C12 8.5 10.5 8.5 9.5 9.5C8.5 10.5 8.5 12 9.5 13" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/><path d="M8 10H11M8 12H11" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
+            commute: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="13" r="7" fill="#fef08a"/><circle cx="11" cy="11" r="7" stroke="#0d1c40" stroke-width="2" fill="white"/><path d="M11 7V11L13 13" stroke="#0d1c40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 2V4" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
+            type: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 11L12 4L19 11V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V11Z" fill="#fef08a" transform="translate(2, 2)"/><path d="M3 9L11 2L19 9V17C19 18.1046 18.1046 19 17 19H5C3.89543 19 3 18.1046 3 17V9Z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M8 19V13H14V19" stroke="#0d1c40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+            jardin: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 8C16 5.23858 13.7614 3 11 3C8.23858 3 6 5.23858 6 8C3.79086 8 2 9.79086 2 12C2 14.2091 3.79086 16 6 16H16C18.2091 16 20 14.2091 20 12C20 9.79086 18.2091 8 16 8Z" fill="#fef08a" transform="translate(2, 2)"/><path d="M11 21V14" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/><path d="M16 8C16 5.23858 13.7614 3 11 3C8.23858 3 6 5.23858 6 8C3.79086 8 2 9.79086 2 12C2 14.2091 3.79086 16 6 16H16C18.2091 16 20 14.2091 20 12C20 9.79086 18.2091 8 16 8Z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`,
+            surface: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>`,
+            vibe: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
+        };
+
+        container.innerHTML = this.criteria.map((crit, idx) => {
+            const config = this.properties[crit.property];
+            const iconSvg = icons[crit.property] || config.icon;
+
+            let valueDisplayHtml = '';
+            if (crit.property === 'commute') {
+                const availableWorkplaces = (window.activeWorkplaces && window.activeWorkplaces.length > 0)
+                    ? window.activeWorkplaces
+                    : [{ id: 'bastille', name: 'Bastille' }, { id: 'chatelet', name: 'Châtelet' }, { id: 'defense', name: 'La Défense' }];
+                
+                valueDisplayHtml = `
+                    <div class="flex items-center gap-1.5 px-2.5 h-full">
+                        <span class="bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-100">&lt;</span>
+                        <select class="font-bold text-[#0d1c40] text-[13px] bg-transparent outline-none cursor-pointer" onchange="window.criteriaBuilder.updateCriterion('${crit.id}', 'workplace', this.value)">
+                            ${availableWorkplaces.map(wp => `<option value="${wp.id}" ${crit.workplace === wp.id ? 'selected' : ''}>${wp.name || wp.id.charAt(0).toUpperCase() + wp.id.slice(1)}</option>`).join('')}
+                        </select>
+                        <div class="flex items-center bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 ml-0.5">
+                             <input type="number" class="font-bold text-[#0d1c40] text-[13px] bg-transparent w-7 text-center outline-none" value="${crit.value}" onchange="window.criteriaBuilder.updateCriterion('${crit.id}', 'value', parseInt(this.value))">
+                             <span class="text-slate-400 text-[9px] font-bold ml-1 uppercase">min</span>
+                        </div>
+                    </div>
+                `;
+            } else if (config.options) {
+                valueDisplayHtml = `
+                    <div class="flex items-center gap-1.5 px-2.5 h-full">
+                        <span class="bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border border-slate-100">${crit.operator}</span>
+                        <select class="font-bold text-[#0d1c40] text-[13px] bg-transparent outline-none cursor-pointer" onchange="window.criteriaBuilder.updateCriterion('${crit.id}', 'value', this.value)">
+                            ${config.options.map(o => `<option value="${o}" ${crit.value === o ? 'selected' : ''}>${o}</option>`).join('')}
+                        </select>
+                    </div>
+                `;
+            } else {
+                valueDisplayHtml = `
+                    <div class="flex items-center gap-1.5 px-2.5 h-full">
+                        <span class="bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-100">${crit.operator}</span>
+                        <input type="number" class="font-bold text-[#0d1c40] text-[13px] bg-transparent w-16 outline-none" value="${crit.value}" onchange="window.criteriaBuilder.updateCriterion('${crit.id}', 'value', parseInt(this.value))">
+                        <span class="text-slate-400 font-semibold ml-0.5 text-[11px]">${config.unit || ''}</span>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="shrink-0 flex items-center bg-white rounded-full border border-slate-200 p-0.5 pr-2 shadow-sm h-9 animate-in fade-in zoom-in duration-300">
+                    <div class="flex items-center gap-1.5 px-2.5 h-full font-semibold text-[#0d1c40] border-r border-slate-100 text-[13px]">
+                        <div class="relative w-4 h-4 flex items-center justify-center">
+                            ${iconSvg.replace('w-5 h-5', 'w-4 h-4')}
+                        </div>
+                        <select class="bg-transparent outline-none cursor-pointer font-bold" onchange="window.criteriaBuilder.updateCriterion('${crit.id}', 'property', this.value)">
+                            ${Object.entries(this.properties).map(([key, p]) => `
+                                <option value="${key}" ${crit.property === key ? 'selected' : ''}>${p.label}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    
+                    ${valueDisplayHtml}
+
+                    <button onclick="window.criteriaBuilder.removeCriterion('${crit.id}')" class="w-5 h-5 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors ml-1 border border-slate-100">
+                        <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+function evaluateCriterion(props, crit) {
+    const val = crit.value;
+    const insee = props.code;
+
+    switch (crit.property) {
+        case 'type':
+            const pav = props.pav || 0;
+            if (val === 'Maison') return pav > 0.05;
+            if (val === 'Appartement') return (1 - pav) > 0.05;
+            return true;
+        case 'jardin':
+            return val === 'Non' || (props.pav > 0.3 || (props.counts?.garden || 0) > 0);
+        case 'surface':
+            // Bucket-based matching
+            if (!props.demo?.surface_dist) return true;
+            // Does this IRIS have at least 5% of housing in the target bucket or larger?
+            const buckets = ['0-40m²', '40-60m²', '60-80m²', '80-100m²', '100-120m²', '120m²+'];
+            // Normalize val if it contains the m2 unit
+            const targetLabel = val.includes('m²') ? val : (val === '120+' ? '120m²+' : val);
+            const targetIdx = buckets.indexOf(targetLabel);
+
+            // Check all buckets from targetIdx and above
+            let totalPct = 0;
+            for (let i = targetIdx; i < buckets.length; i++) {
+                totalPct += (props.demo.surface_dist[buckets[i]] || 0);
+            }
+            return totalPct >= 5; // Minimum 5% presence
+
+        case 'budget':
+            const typeKey = window.currentPropertyType || 'all';
+            const sector = props[typeKey] || props.all || props.prices || {};
+            const price = sector.price || sector.median || 5000;
+            const budget = parseFloat(val) || 850000;
+            // Be very permissive: if we can't find a price, don't exclude
+            if (!price || price === 0) return true;
+            return (budget / price) >= 15; // Lowered from 30 to 15m2 for extreme permissiveness during debug
+        case 'vibe':
+            return props.segment_name === val;
+        case 'commute':
+            const workplaceId = crit.workplace || 'bastille';
+            const journey = window.precomputedJourneysRaw?.[insee]?.[workplaceId]?.main;
+            if (!journey) return true;
+            return journey.duration <= val;
+        default:
+            return true;
+    }
+}
+
+
+// Initialize
+window.criteriaBuilder = new CriteriaBuilder();

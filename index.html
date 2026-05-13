@@ -21,6 +21,7 @@
 
     <!-- App Styles -->
     <link rel="stylesheet" href="./style.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
 
     <style>
         /* Glassmorphic Modal */
@@ -55,8 +56,54 @@
 
 <body class="bg-gray-100 overflow-hidden">
 
-    <!-- Top Layer Pills (Now at the top center) -->
-    <div class="fixed top-6 left-1/2 -translate-x-1/2 z-[1001] flex flex-wrap justify-center items-center gap-4 px-2 pb-6">
+    <svg width="0" height="0" class="absolute hidden">
+        <defs>
+            <!-- Forme de Paris Intra-muros -->
+            <path id="paris-shape" d="M 140 170 C 160 130, 230 130, 250 150 C 270 160, 260 180, 270 190 C 290 190, 300 230, 260 240 C 220 260, 170 260, 150 240 C 130 230, 120 220, 120 200 C 110 180, 120 160, 140 170 Z" stroke-linejoin="round" />
+            
+            <!-- La Seine -->
+            <path id="seine-path" d="M 450 400 C 350 330, 290 270, 250 235 C 220 205, 190 195, 160 205 C 130 215, 110 205, 90 175 C 70 145, 80 100, 30 50 C 10 30, -20 10, -30 0" stroke-linecap="round" />
+            
+            <!-- Quartiers IRIS Dynamiques (Petite couronne) -->
+            <!-- Nord-Ouest -->
+            <path id="iris-nw" d="M 140 170 L 110 130 Q 150 90 190 110 L 230 130 Q 180 140 140 170 Z" />
+            <!-- Nord-Est -->
+            <path id="iris-ne" d="M 230 130 Q 260 90 310 120 L 250 150 Q 250 130 230 130 Z" />
+            <!-- Est -->
+            <path id="iris-e"  d="M 250 150 L 320 140 Q 350 190 300 220 L 270 190 Q 280 160 250 150 Z" />
+            <!-- Sud -->
+            <path id="iris-s"  d="M 260 240 Q 280 300 200 310 L 150 240 Q 200 270 260 240 Z" />
+            <!-- Ouest -->
+            <path id="iris-w"  d="M 150 240 L 90 260 Q 50 190 110 160 L 140 170 Q 110 200 150 240 Z" />
+
+            <!-- Polygonal IRIS Shapes inspired by the map screenshot -->
+            <path id="poly-nw" d="M 140 170 L 120 150 L 100 160 L 90 130 L 130 100 L 160 110 L 180 90 L 200 110 L 230 130 Z" />
+            <path id="poly-ne" d="M 230 130 L 250 110 L 280 120 L 310 90 L 330 110 L 300 140 L 320 160 L 280 170 L 250 150 Z" />
+            <path id="poly-e" d="M 250 150 L 270 180 L 300 170 L 320 200 L 290 220 L 310 240 L 270 240 L 250 210 Z" />
+            <path id="poly-s" d="M 260 240 L 240 270 L 270 290 L 230 310 L 200 290 L 180 320 L 150 290 L 160 260 L 150 240 Z" />
+            <path id="poly-w" d="M 150 240 L 120 250 L 100 280 L 70 250 L 90 220 L 60 200 L 100 180 L 120 190 L 140 170 Z" />
+
+            <!-- Neighborhood borders for 1-line logo -->
+            <path id="border-nw" d="M 60 70 Q 90 50 110 80 Q 100 110 70 110 Q 50 90 60 70 Z" />
+            <path id="border-ne" d="M 310 80 Q 340 70 360 100 Q 350 130 320 120 Q 300 100 310 80 Z" />
+            <path id="border-se" d="M 260 310 Q 290 300 310 330 Q 290 360 260 350 Q 240 330 260 310 Z" />
+            <path id="border-sw" d="M 30 250 Q 60 230 80 260 Q 70 290 40 290 Q 20 270 30 250 Z" />
+
+            <!-- Dégradés -->
+            <linearGradient id="purple-pink" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#a855f7" /> <!-- Purple 500 -->
+                <stop offset="100%" stop-color="#ec4899" /> <!-- Pink 500 -->
+            </linearGradient>
+
+            <linearGradient id="iris-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#d8b4fe" stop-opacity="0.9" /> <!-- Purple 300 -->
+                <stop offset="100%" stop-color="#a855f7" stop-opacity="0.3" /> <!-- Purple 500 -->
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <!-- Layer Pills Container (Vertical on the right) -->
+    <div id="layer-pills-container" class="fixed right-6 top-1/2 -translate-y-1/2 z-[1001] flex flex-col gap-3 pointer-events-auto">
             
             <!-- Mobilité -->
             <div id="pill-group-mobility" class="relative group">
@@ -66,7 +113,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="15" width="10" height="4" rx="1"/><path d="m15 15-2-2h-2l-2 2"/><path d="M7 11V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v7"/><path d="M10 20v.01"/><path d="M14 20v.01"/></svg>
                     </label>
                 </div>
-                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 flex flex-col gap-2 opacity-0 invisible translate-y-2 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-[1002]">
+                <div class="absolute right-full top-1/2 -translate-y-1/2 mr-3 flex flex-row-reverse gap-2 opacity-0 invisible translate-x-2 group-hover:opacity-100 group-hover:visible group-hover:translate-x-0 transition-all duration-200 z-[1002]">
                     <div class="layer-pill sub-pill" data-tooltip-right="Transports">
                         <input type="checkbox" id="show-stations" class="sub-mobilite" onchange="updateChildState('mobilite'); updateStationsVisibility()">
                         <label for="show-stations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="15" width="10" height="4" rx="1"/><path d="m15 15-2-2h-2l-2 2"/><path d="M7 11V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v7"/><path d="M10 20v.01"/><path d="M14 20v.01"/></svg></label>
@@ -94,7 +141,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
                     </label>
                 </div>
-                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 flex flex-col gap-2 opacity-0 invisible translate-y-2 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-[1002]">
+                <div class="absolute right-full top-1/2 -translate-y-1/2 mr-3 flex flex-row-reverse gap-2 opacity-0 invisible translate-x-2 group-hover:opacity-100 group-hover:visible group-hover:translate-x-0 transition-all duration-200 z-[1002]">
                     <div class="layer-pill sub-pill" data-tooltip-right="Boulangeries">
                         <input type="checkbox" id="show-boulangerie" class="sub-commerces" onchange="updateChildState('commerces'); updateCommercesVisibility()">
                         <label for="show-boulangerie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 11 4-7"/><path d="m19 11-4-7"/><path d="M2 11h20"/><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.7-7.4"/><path d="m9 11 1 9"/><path d="m15 11-1 9"/></svg></label>
@@ -142,7 +189,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h.01"/><path d="M15 12h.01"/><path d="M10 16c.5.3 1.2.5 2 .5s1.5-.2 2-.5"/><path d="M19 6.3a9 9 0 0 1 1.8 3.9 2 2 0 0 1 0 3.6 9 9 0 0 1-17.6 0 2 2 0 0 1 0-3.6A9 9 0 0 1 12 3c2 0 3.9.7 5.4 1.9Z"/><path d="M8 3V1"/><path d="M16 3V1"/></svg>
                     </label>
                 </div>
-                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 flex flex-col gap-2 opacity-0 invisible translate-y-2 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-[1002]">
+                <div class="absolute right-full top-1/2 -translate-y-1/2 mr-3 flex flex-row-reverse gap-2 opacity-0 invisible translate-x-2 group-hover:opacity-100 group-hover:visible group-hover:translate-x-0 transition-all duration-200 z-[1002]">
                     <div class="layer-pill sub-pill" data-tooltip-right="Pharmacies">
                         <input type="checkbox" id="show-pharmacie" class="sub-sante" onchange="updateChildState('sante'); updateCommercesVisibility()">
                         <label for="show-pharmacie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M2 12h20"/><path d="m18 12 4-4"/><path d="m6 12-4 4"/><path d="m12 6-4-4"/><path d="m12 18 4 4"/></svg></label>
@@ -162,7 +209,7 @@
                         <span class="text-lg">🍻</span>
                     </label>
                 </div>
-                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 flex flex-col gap-2 opacity-0 invisible translate-y-2 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-[1002]">
+                <div class="absolute right-full top-1/2 -translate-y-1/2 mr-3 flex flex-row-reverse gap-2 opacity-0 invisible translate-x-2 group-hover:opacity-100 group-hover:visible group-hover:translate-x-0 transition-all duration-200 z-[1002]">
                     <div class="layer-pill sub-pill" data-tooltip-right="Restaurants">
                         <input type="checkbox" id="show-restaurant" class="sub-sorties" onchange="updateChildState('sorties'); updateCommercesVisibility()">
                         <label for="show-restaurant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg></label>
@@ -190,7 +237,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                     </label>
                 </div>
-                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 flex flex-col gap-2 opacity-0 invisible translate-y-2 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-[1002]">
+                <div class="absolute right-full top-1/2 -translate-y-1/2 mr-3 flex flex-row-reverse gap-2 opacity-0 invisible translate-x-2 group-hover:opacity-100 group-hover:visible group-hover:translate-x-0 transition-all duration-200 z-[1002]">
                     <div class="layer-pill sub-pill" data-tooltip-right="Écoles">
                         <input type="checkbox" id="show-schools" class="sub-infra" onchange="updateChildState('infra'); updateSchoolsVisibility()">
                         <label for="show-schools"><span class="text-xs">🏫</span></label>
@@ -226,7 +273,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
                     </label>
                 </div>
-                <div class="absolute top-full left-1/2 -translate-x-1/2 mt-2 flex flex-col gap-2 opacity-0 invisible translate-y-2 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-[1002]">
+                <div class="absolute right-full top-1/2 -translate-y-1/2 mr-3 flex flex-row-reverse gap-2 opacity-0 invisible translate-x-2 group-hover:opacity-100 group-hover:visible group-hover:translate-x-0 transition-all duration-200 z-[1002]">
                     <div class="layer-pill sub-pill" data-tooltip-right="Espaces Verts">
                         <input type="checkbox" id="show-espaces-verts" class="sub-maps" onchange="updateChildState('maps'); updateEspacesVertsVisibility()">
                         <label for="show-espaces-verts"><span class="text-xs">🌳</span></label>
@@ -277,16 +324,76 @@
 
     </div>
 
+    <!-- Criteria Pills Wrapper (Top center-right to avoid sidebar) -->
+    <div class="fixed top-6 left-[408px] right-6 z-[1001] pointer-events-none flex items-center justify-center">
+        <div id="criteria-pills-container" class="flex flex-wrap gap-2 pb-4 scrollbar-hide items-center justify-center w-full pointer-events-auto">
+            <div id="criteria-container" class="flex flex-wrap gap-2 items-center justify-center">
+                <!-- Criteria pills will be injected here by main.js -->
+            </div>
+
+            <!-- Add Button (Moved to the end) -->
+            <button id="add-criterion-btn" onclick="window.criteriaBuilder.addCriterion()" class="shrink-0 w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-blue-500 hover:border-blue-300 transition-all shadow-sm group">
+                <svg class="w-4 h-4 group-hover:scale-125 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+            </button>
+        </div>
+    </div>
+
+        <style>
+            /* Hide scrollbar for Chrome, Safari and Opera */
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+            /* Hide scrollbar for IE, Edge and Firefox */
+            .scrollbar-hide {
+                -ms-overflow-style: none;  /* IE and Edge */
+                scrollbar-width: none;  /* Firefox */
+            }
+        </style>
+    </div>
+
+    </div>
+
     <!-- Premium Loading Overlay -->
     <div id="loader"
         class="fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-700">
-        <div class="relative">
-            <div class="w-16 h-16 border-4 border-blue-50 border-t-blue-600 rounded-full animate-spin"></div>
-            <div class="absolute inset-0 flex items-center justify-center">
-                <span class="text-[10px] font-bold text-blue-600">IDB</span>
+        <div class="relative flex flex-col items-center">
+            <!-- Grand Logo SVG -->
+            <div class="relative w-48 h-48 md:w-64 md:h-64">
+                <svg viewBox="0 0 400 400" class="w-full h-full drop-shadow-xl">
+                    
+                    <!-- Quartiers IRIS Dynamiques (Arrière-plan) -->
+                    <g fill="url(#iris-gradient)" stroke="#a855f7" stroke-width="1.5" stroke-linejoin="round" class="mix-blend-multiply">
+                        <use href="#poly-nw" class="anim-iris" style="animation-delay: 0.2s;" />
+                        <use href="#poly-ne" class="anim-iris" style="animation-delay: 0.6s;" />
+                        <use href="#poly-e"  class="anim-iris" style="animation-delay: 1.0s;" />
+                        <use href="#poly-s"  class="anim-iris" style="animation-delay: 1.4s;" />
+                        <use href="#poly-w"  class="anim-iris" style="animation-delay: 1.8s;" />
+                    </g>
+
+                    <!-- Ombre de Paris (Jaune) -->
+                    <use href="#paris-shape" fill="#fef08a" transform="translate(12, 12)" class="anim-build-paris" />
+                    
+                    <!-- Forme de Paris Principale -->
+                    <use href="#paris-shape" fill="#ffffff" stroke="#0d1c40" stroke-width="8" class="anim-build-paris" />
+                    
+                    <!-- La Seine (Tracé corrigé) -->
+                    <use href="#seine-path" stroke="url(#purple-pink)" stroke-width="16" fill="none" class="anim-build-seine" />
+                    
+                    <!-- Les Satellites (Villes Extramuros) -->
+                    <g fill="#0d1c40" class="anim-build-dots">
+                        <circle cx="80" cy="90" r="16" style="transform-origin: 80px 90px; animation-delay: 4.5s;" />
+                        <circle cx="330" cy="100" r="16" class="anim-build-dots" style="transform-origin: 330px 100px; animation-delay: 1.7s;" />
+                        <circle cx="280" cy="330" r="16" class="anim-build-dots" style="transform-origin: 280px 330px; animation-delay: 1.9s;" />
+                        <circle cx="50" cy="270" r="16" class="anim-build-dots" style="transform-origin: 50px 270px; animation-delay: 2.1s;" />
+                    </g>
+                </svg>
+            </div>
+
+            <!-- Texte Grand Format -->
+            <div class="mt-4 text-4xl md:text-5xl tracking-tighter flex items-baseline justify-center">
+                <span class="brand-text-extra">extra</span><span class="brand-text-muros">muros</span>
             </div>
         </div>
-        <h2 class="mt-4 text-xl font-bold text-gray-800">Extra-muros</h2>
         <p id="loader-status" class="text-xs text-gray-400 mt-1 uppercase tracking-wider">Chargement des données...</p>
         <div class="mt-6 w-48 h-1 bg-gray-100 rounded-full overflow-hidden">
             <div id="loader-progress" class="h-full bg-[#0f172a] transition-all duration-300" style="width: 0%"></div>
@@ -323,414 +430,53 @@
     <!-- The Map Container -->
     <div id="map"></div>
 
-    <!-- Preferences Modal Backdrop -->
-    <div id="preferences-backdrop"></div>
-    
-    <div id="ui-panel" class="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-100 modal-mode">
-        <!-- Modal Navigation (Left Column) -->
-        <div class="modal-nav">
-            <div class="modal-nav-header">
-                <h1 class="text-xl font-extrabold text-slate-800">Extra-muros</h1>
-                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">La vie après Paris</p>
-            </div>
-            
-            <div class="modal-nav-list">
-                <div class="modal-nav-item active">
-                    <span class="icon">🏘️</span>
-                    <div class="label">
-                        <span class="title">Vie de quartier</span>
-                        <span class="desc">Vibe & Style de vie</span>
-                    </div>
-                </div>
-                <div class="modal-nav-item">
-                    <span class="icon">📍</span>
-                    <div class="label">
-                        <span class="title">Localisation</span>
-                        <span class="desc">Travail & Mobilité</span>
-                    </div>
-                </div>
-                <div class="modal-nav-item">
-                    <span class="icon">🚇</span>
-                    <div class="label">
-                        <span class="title">Axes de Transport</span>
-                        <span class="desc">Exploration par ligne</span>
-                    </div>
-                </div>
-                <div class="modal-nav-item">
-                    <span class="icon">💰</span>
-                    <div class="label">
-                        <span class="title">Budget & Bien</span>
-                        <span class="desc">Prix & Surface</span>
-                    </div>
-                </div>
-                <div class="modal-nav-item">
-                    <span class="icon">✨</span>
-                    <div class="label">
-                        <span class="title">Profil Social</span>
-                        <span class="desc">Démographie & Services</span>
-                    </div>
-                </div>
-            </div>
+    <!-- UI Panel (Sidebar) -->
+    <div id="ui-panel" class="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-100">
 
-            <div class="modal-nav-footer">
-                <button onclick="window.toggleInfoModal(true)" class="flex items-center gap-2 text-slate-400 hover:text-blue-500 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span class="text-[10px] font-bold uppercase">Infos & Sources</span>
-                </button>
+        <!-- Persistent Sidebar Header -->
+        <div class="px-6 pt-6 pb-2 border-b border-slate-50">
+            <div class="flex items-center justify-between mb-1">
+                <div class="flex flex-row items-center gap-3 cursor-pointer">
+                    <!-- Icone SVG Réduite -->
+                    <div class="w-[60px] h-[60px] shrink-0">
+                        <svg viewBox="0 0 400 400" class="w-full h-full">
+                            <!-- Ombre -->
+                            <use href="#paris-shape" fill="#fef08a" transform="translate(10, 10)" />
+                            
+                            <!-- Paris Tracé Continu -->
+                            <use href="#paris-shape" fill="#ffffff" stroke="#0d1c40" stroke-width="8" class="anim-mix-draw" />
+                            
+                            <!-- Seine Tracé Continu -->
+                            <use href="#seine-path" stroke="url(#purple-pink)" stroke-width="16" fill="none" class="anim-mix-draw" style="animation-delay: 0.5s;" />
+                            
+                            <!-- Satellites Flottants -->
+                            <g fill="#0d1c40">
+                                <circle cx="80" cy="90" r="18" class="anim-mix-float-1" style="transform-origin: 80px 90px;" />
+                                <circle cx="330" cy="100" r="18" class="anim-mix-float-2" style="transform-origin: 330px 100px;" />
+                                <circle cx="280" cy="330" r="18" class="anim-mix-float-3" style="transform-origin: 280px 330px;" />
+                                <circle cx="50" cy="270" r="18" class="anim-mix-float-4" style="transform-origin: 50px 270px;" />
+                            </g>
+                        </svg>
+                    </div>
+
+                    <!-- Texte -->
+                    <div class="text-4xl tracking-tighter flex items-baseline">
+                        <span class="brand-text-extra">extra</span><span class="brand-text-muros">muros</span>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Modal Content (Right Column / Main Sidebar Content) -->
-        <div id="panel-content" class="modal-content-wrapper p-6">
+        <!-- Scrollable Content -->
+        <div id="panel-content" class="modal-content-wrapper">
             
-            <!-- VIEW 1: Preferences Form (Visible in Modal) -->
-            <div id="preferences-form-content">
-                <!-- Redundant header removed -->
-
-                <!-- Vibe Selection -->
-                <div class="mb-6 section-vibe">
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Vie de quartier</label>
-                    <div class="max-h-[128px] overflow-y-auto pr-2 custom-vibe-scroll">
-                        <div id="vibe-selector" class="flex flex-wrap gap-2">
-                            <button data-vibe="Le Village Urbain" class="vibe-chip" title="Le Village Urbain">
-                                <span class="vibe-icon">🏘️</span> <span class="vibe-label">Village Urbain</span>
-                            </button>
-                            <button data-vibe="Le Standing Patrimonial" class="vibe-chip" title="Le Standing Patrimonial">
-                                <span class="vibe-icon">🏛️</span> <span class="vibe-label">Standing Patrimonial</span>
-                            </button>
-                            <button data-vibe="La Riviera (Bords de l'Eau)" class="vibe-chip" title="La Riviera (Bords de l'Eau)">
-                                <span class="vibe-icon">🌊</span> <span class="vibe-label">La Riviera</span>
-                            </button>
-                            <button data-vibe="Le Coteau résidentiel" class="vibe-chip" title="Le Coteau résidentiel">
-                                <span class="vibe-icon">⛰️</span> <span class="vibe-label">Coteau Résidentiel</span>
-                            </button>
-                            <button data-vibe="Le Néo-Résidentiel" class="vibe-chip" title="Le Néo-Résidentiel">
-                                <span class="vibe-icon">✨</span> <span class="vibe-label">Néo-Résidentiel</span>
-                            </button>
-                            <button data-vibe="Le Faubourg / Maison de Ville" class="vibe-chip" title="Le Faubourg / Maison de Ville">
-                                <span class="vibe-icon">🏠</span> <span class="vibe-label">Faubourg</span>
-                            </button>
-                            <button data-vibe="Le Pavillonnaire Familial" class="vibe-chip" title="Le Pavillonnaire Familial">
-                                <span class="vibe-icon">🏡</span> <span class="vibe-label">Pavillonnaire</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mb-6 section-work">
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Lieux de travail</label>
-                    <div class="flex flex-col gap-2 mb-3">
-                        <select id="hub-selector"
-                            class="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white">
-                            <option value="" disabled selected>Ajouter un lieu...</option>
-                            <option value="bastille">Bastille, Paris</option>
-                            <option value="saint-lazare">Saint-Lazare, Paris</option>
-                            <option value="montparnasse">Montparnasse, Paris</option>
-                            <option value="la-defense">La Défense, Puteaux</option>
-                            <option value="saclay">Plateau de Saclay</option>
-                            <option value="saint-denis">Saint-Denis Pleyel</option>
-                            <option value="bibliotheque">Bibliothèque F. Mitterrand, Paris</option>
-                            <option value="la-plaine">La Plaine Saint-Denis, St-Denis</option>
-                        </select>
-                        <button onclick="addWorkplace()"
-                            class="w-full py-1.5 bg-[#0f172a] text-white text-xs font-bold rounded-lg hover:bg-slate-900 transition-colors shadow-sm">
-                            + Ajouter un lieu de travail
-                        </button>
-                    </div>
-
-                    <div id="active-workplaces" class="flex flex-col gap-2">
-                        <!-- Dynamically populated -->
-                    </div>
-                </div>
-
-                <!-- NEW: Transit Axis Exploration Section -->
-                <div class="mb-6 section-axis">
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Exploration par grand axe</label>
-                    <div class="p-3 bg-blue-50/50 rounded-xl border border-blue-100 mb-4">
-                        <p class="text-[10px] text-blue-700 leading-relaxed">
-                            Concentrez votre recherche sur les communes desservies par une ligne spécifique depuis votre hub.
-                        </p>
-                    </div>
-
-                    <div class="flex flex-col gap-3">
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Hub de départ</label>
-                            <select id="axis-hub-selector" class="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:border-blue-500 outline-none bg-white">
-                                <option value="bastille" selected>Bastille, Paris</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Choisir un axe</label>
-                            <div id="axis-selector-list" class="grid grid-cols-2 gap-2">
-                                <!-- Dynamically populated axes -->
-                            </div>
-                        </div>
-
-                        <div id="branch-selector-container" class="hidden">
-                            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Direction / Branche</label>
-                            <div id="branch-selector-list" class="flex flex-wrap gap-2">
-                                <!-- Dynamically populated branches -->
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-6 pt-4 border-t border-gray-100">
-                        <button id="reset-axis-btn" class="w-full py-2 bg-gray-100 text-gray-500 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-gray-200 transition-all hidden">
-                            Réinitialiser l'exploration par axe
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Neighborhood Profile Preferences (Hard Filters) -->
-                <div class="mb-6 pt-4 border-t border-gray-100 section-profil">
-                    <label class="block text-sm font-semibold text-gray-700 mb-2 italic">Profil & Mode de Vie (Influence du score)</label>
-                    
-                    <div class="space-y-4">
+            <div id="search-perimeter-content" class="view-hidden"></div>
 
 
-                        <!-- Mobilité -->
-                        <div class="pref-card">
-                            <div class="flex items-center gap-2 mb-2 px-1">
-                                <span class="text-xs">⚡</span>
-                                <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Mobilité & Transports</label>
-                            </div>
-                            <div class="pref-chips-container no-scrollbar" id="pref-mobility">
-                                <div class="pref-chip active" data-value="" onclick="selectPref('mobility', '', this)" data-pref="mobility">
-                                    <span class="chip-label">Tous</span>
-                                </div>
-                                <div class="pref-chip" data-value="Loin des gares" onclick="selectPref('mobility', 'Loin des gares', this)" data-pref="mobility">
-                                    <span class="chip-icon">🚗</span> <span class="chip-label">Voiture</span>
-                                </div>
-                                <div class="pref-chip" data-value="Connecté" onclick="selectPref('mobility', 'Connecté', this)" data-pref="mobility">
-                                    <span class="chip-icon">🚌</span> <span class="chip-label">Connecté</span>
-                                </div>
-                                <div class="pref-chip" data-value="Sur le métro" onclick="selectPref('mobility', 'Sur le métro', this)" data-pref="mobility">
-                                    <span class="chip-icon">🚇</span> <span class="chip-label">Sur le métro</span>
-                                </div>
-                                <div class="pref-chip" data-value="Hub hyper-centre" onclick="selectPref('mobility', 'Hub hyper-centre', this)" data-pref="mobility">
-                                    <span class="chip-icon">🚉</span> <span class="chip-label">Hub Centre</span>
-                                </div>
-                            </div>
-                        </div>
+            <div id="sidebar-results-content" class="view-hidden"></div>
 
-                        <!-- Vie de quartier -->
-                        <div class="pref-card">
-                            <div class="flex items-center gap-2 mb-2 px-1">
-                                <span class="text-xs">🏘️</span>
-                                <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Vie de quartier</label>
-                            </div>
-                            <div class="pref-chips-container no-scrollbar" id="pref-vieQuartier">
-                                <div class="pref-chip active" data-value="" onclick="selectPref('vieQuartier', '', this)" data-pref="vieQuartier">
-                                    <span class="chip-label">Tous</span>
-                                </div>
-                                <div class="pref-chip" data-value="Calme & Résid." onclick="selectPref('vieQuartier', 'Calme & Résid.', this)" data-pref="vieQuartier">
-                                    <span class="chip-icon">🍃</span> <span class="chip-label">Calme & Résid.</span>
-                                </div>
-                                <div class="pref-chip" data-value="Pratique & Paisible" onclick="selectPref('vieQuartier', 'Pratique & Paisible', this)" data-pref="vieQuartier">
-                                    <span class="chip-icon">🥖</span> <span class="chip-label">Pratique</span>
-                                </div>
-                                <div class="pref-chip" data-value="Commerçant & Animé" onclick="selectPref('vieQuartier', 'Commerçant & Animé', this)" data-pref="vieQuartier">
-                                    <span class="chip-icon">🛍️</span> <span class="chip-label">Animé</span>
-                                </div>
-                                <div class="pref-chip" data-value="Ultra-Animé & Festif" onclick="selectPref('vieQuartier', 'Ultra-Animé & Festif', this)" data-pref="vieQuartier">
-                                    <span class="chip-icon">🥂</span> <span class="chip-label">Ultra-Animé</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Urbanisme -->
-                        <div class="pref-card">
-                            <div class="flex items-center gap-2 mb-2 px-1">
-                                <span class="text-xs">🏢</span>
-                                <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Urbanisme</label>
-                            </div>
-                            <div class="pref-chips-container no-scrollbar" id="pref-urbanisme">
-                                <div class="pref-chip active" data-value="" onclick="selectPref('urbanisme', '', this)" data-pref="urbanisme">
-                                    <span class="chip-label">Tous</span>
-                                </div>
-                                <div class="pref-chip" data-value="Campagne" onclick="selectPref('urbanisme', 'Campagne', this)" data-pref="urbanisme">
-                                    <span class="chip-icon">🌳</span> <span class="chip-label">Campagne</span>
-                                </div>
-                                <div class="pref-chip" data-value="Pavillonnaire" onclick="selectPref('urbanisme', 'Pavillonnaire', this)" data-pref="urbanisme">
-                                    <span class="chip-icon">🏡</span> <span class="chip-label">Pavillonnaire</span>
-                                </div>
-                                <div class="pref-chip" data-value="Centre Mixte" onclick="selectPref('urbanisme', 'Centre Mixte', this)" data-pref="urbanisme">
-                                    <span class="chip-icon">🏙️</span> <span class="chip-label">Centre Mixte</span>
-                                </div>
-                                <div class="pref-chip" data-value="Centre Ville Animé" onclick="selectPref('urbanisme', 'Centre Ville Animé', this)" data-pref="urbanisme">
-                                    <span class="chip-icon">🏢</span> <span class="chip-label">Centre Ville Animé</span>
-                                </div>
-                            </div>
-                        </div>
-
-
-                        <!-- Profil Social -->
-                        <div class="pref-card">
-                            <div class="flex items-center gap-2 mb-2 px-1">
-                                <span class="text-xs">👥</span>
-                                <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Profil Social</label>
-                            </div>
-                            <div class="pref-chips-container no-scrollbar" id="pref-socio">
-                                <div class="pref-chip active" data-value="" onclick="selectPref('socio', '', this)" data-pref="socio">
-                                    <span class="chip-label">Tous</span>
-                                </div>
-                                <div class="pref-chip" data-value="Populaire" onclick="selectPref('socio', 'Populaire', this)" data-pref="socio">
-                                    <span class="chip-label">Populaire</span>
-                                </div>
-                                <div class="pref-chip" data-value="Mixité sociale" onclick="selectPref('socio', 'Mixité sociale', this)" data-pref="socio">
-                                    <span class="chip-label">Mixité sociale</span>
-                                </div>
-                                <div class="pref-chip" data-value="Aisé" onclick="selectPref('socio', 'Aisé', this)" data-pref="socio">
-                                    <span class="chip-label">Aisé</span>
-                                </div>
-                                <div class="pref-chip" data-value="Très aisé" onclick="selectPref('socio', 'Très aisé', this)" data-pref="socio">
-                                    <span class="chip-label">Très aisé</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Démographie -->
-                        <div class="pref-card">
-                            <div class="flex items-center gap-2 mb-2 px-1">
-                                <span class="text-xs">👶</span>
-                                <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wider">Démographie</label>
-                            </div>
-                            <div class="pref-chips-container no-scrollbar" id="pref-demo">
-                                <div class="pref-chip active" data-value="" onclick="selectPref('demo', '', this)" data-pref="demo">
-                                    <span class="chip-label">Tous</span>
-                                </div>
-                                <div class="pref-chip" data-value="Jeune & Dynamique" onclick="selectPref('demo', 'Jeune & Dynamique', this)" data-pref="demo">
-                                    <span class="chip-icon">⚡</span> <span class="chip-label">Jeunes</span>
-                                </div>
-                                <div class="pref-chip" data-value="Familles & Actifs" onclick="selectPref('demo', 'Familles & Actifs', this)" data-pref="demo">
-                                    <span class="chip-icon">👨‍👩‍👧</span> <span class="chip-label">Familles</span>
-                                </div>
-                                <div class="pref-chip" data-value="Résidentiel Mature" onclick="selectPref('demo', 'Résidentiel Mature', this)" data-pref="demo">
-                                    <span class="chip-icon">🏡</span> <span class="chip-label">Mature</span>
-                                </div>
-                                <div class="pref-chip" data-value="Calme & Séniors" onclick="selectPref('demo', 'Calme & Séniors', this)" data-pref="demo">
-                                    <span class="chip-icon">👴</span> <span class="chip-label">Séniors</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Question 2: Budget -->
-                <div class="mb-6 section-budget">
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Budget d'achat</label>
-                    <div class="flex justify-between text-xs text-gray-500 mb-1">
-                        <span>Prix du bien visé</span>
-                        <span id="budget-display" class="font-bold text-green-600">850 000 €</span>
-                    </div>
-                    <input id="budget-input" type="range" min="100000" max="1500000" step="10000" value="850000"
-                        class="w-full accent-green-600 mb-1" oninput="updateBudgetDisplay()" />
-                    <div class="flex justify-between text-xs text-gray-400 mb-3 px-1">
-                        <span>Frais de notaire est. (+8%)</span>
-                        <span id="notary-display">+ 68 000 €</span>
-                    </div>
-
-                    <div class="flex justify-between text-xs text-gray-500 mb-1">
-                        <span>Dont apport personnel</span>
-                        <span id="apport-display" class="font-bold text-teal-600">200 000 €</span>
-                    </div>
-                    <input id="apport-input" type="range" min="0" max="500000" step="5000" value="200000"
-                        class="w-full accent-teal-600 mb-1" oninput="updateBudgetDisplay()" />
-                    <div id="reimbursement-display" class="text-xs text-gray-400 text-right mb-3 italic">Emprunt: 718 000 € (~3
-                        595 € / mois on 25 ans)</div>
-
-                    <div class="mb-4">
-                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Taille de logement minimum</label>
-                        <div id="surface-buckets" class="flex flex-wrap gap-2">
-                            <button class="surface-chip" data-value="<30m²" onclick="selectSurfaceBucket('<30m²', this)">&lt;30m²</button>
-                            <button class="surface-chip" data-value="30-40m²" onclick="selectSurfaceBucket('30-40m²', this)">30-40m²</button>
-                            <button class="surface-chip" data-value="40-60m²" onclick="selectSurfaceBucket('40-60m²', this)">40-60m²</button>
-                            <button class="surface-chip" data-value="60-80m²" onclick="selectSurfaceBucket('60-80m²', this)">60-80m²</button>
-                            <button class="surface-chip active" data-value="80-100m²" onclick="selectSurfaceBucket('80-100m²', this)">80-100m²</button>
-                            <button class="surface-chip" data-value="100-120m²" onclick="selectSurfaceBucket('100-120m²', this)">100-120m²</button>
-                            <button class="surface-chip" data-value="120m²+" onclick="selectSurfaceBucket('120m²+', this)">120m²+</button>
-                        </div>
-                        <input type="hidden" id="surface-input" value="80-100m²">
-                    </div>
-                </div>
-
-                <!-- Question 3: Type de bien -->
-                <div class="mb-6 section-bien">
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Type de bien</label>
-                    <div class="flex bg-gray-100 rounded-lg p-1 mb-3">
-                        <button id="btn-type-all" onclick="setPropertyType('all', this)"
-                            class="type-btn flex-1 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 transition-all">Tous</button>
-                        <button id="btn-type-house" onclick="setPropertyType('house', this)"
-                            class="type-btn flex-1 py-1.5 text-xs font-medium text-gray-800 bg-white shadow-sm rounded-md transition-all">Maison</button>
-                        <button id="btn-type-apt" onclick="setPropertyType('apt', this)"
-                            class="type-btn flex-1 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 transition-all">Appartement</button>
-                    </div>
-
-
-                    <div id="garden-container" class="flex items-center gap-2 px-1 transition-all">
-                        <input type="checkbox" id="garden-filter" onchange="updateFilters()" checked
-                            class="accent-green-600 h-3.5 w-3.5">
-
-                        <label for="garden-filter" class="text-xs text-gray-600 cursor-pointer select-none">Exiger un
-                            jardin</label>
-                    </div>
-                </div>
-
-                <!-- Search Validation Button -->
-                <button onclick="window.closePreferencesModal()" class="search-validate-btn">
-                    <span>Optimiser mes quartiers</span>
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                    </svg>
-                </button>
-            </div>
-
-            <!-- VIEW 2: Sidebar Results (Visible when not in Modal) -->
-            <div id="sidebar-results-content" class="hidden">
-                <div class="flex items-center justify-between mb-4">
-                    <h1 class="text-2xl font-bold text-gray-800">Extra-muros</h1>
-                    <button onclick="window.toggleInfoModal(true)" class="text-gray-300 hover:text-blue-500 transition-colors">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    </button>
-                </div>
-                
-                <!-- Integrated Search Bar -->
-                <div class="relative mb-6 group">
-                    <input type="text" id="main-search" placeholder="Rechercher un quartier ou une ville..." 
-                           class="w-full bg-slate-50 border border-slate-100 rounded-2xl px-11 py-3.5 text-sm focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all shadow-sm"
-                           oninput="handleSearch(this.value)">
-                    <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                    </div>
-                    <button id="clear-search" onclick="clearSearch()" class="hidden absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 z-10">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-                
-                <button onclick="window.openPreferencesModal()" class="w-full flex items-center justify-center gap-2 py-2.5 mb-6 border-2 border-slate-100 hover:border-slate-200 bg-white text-slate-600 text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all hover:bg-slate-50 group">
-                    <svg class="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                    </svg>
-                    <span>Ajuster mes critères</span>
-                </button>
-
-                <div class="flex items-center justify-between mb-4">
-                    <label class="text-xs font-bold text-slate-400 uppercase tracking-widest">Meilleurs Matchs</label>
-                </div>
-
-                <div id="sidebar-results-list" class="flex flex-col gap-3">
-                    <!-- Dynamically populated -->
-                </div>
-            </div>
+            <!-- VIEW 3: Neighborhood Info (Visible when an IRIS is selected) -->
+            <div id="info-card" class="info-box view-hidden"></div>
         </div>
     </div>
 
@@ -847,8 +593,6 @@
 
     </div>
 
-    <!-- Neighborhood Info Card -->
-    <div id="info-card" class="info-box"></div>
 
     <!-- Turf.js for spatial analysis -->
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
