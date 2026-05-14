@@ -44,14 +44,14 @@ const idfmColors = {
 };
 
 window.HUBS_COORDS = {
-    'bastille': { name: 'Bastille, Paris', lat: 48.8532, lon: 2.3688, color: '#2563eb', icon: '🏢' },
-    'saint-lazare': { name: 'Saint-Lazare, Paris', lat: 48.8752, lon: 2.3267, color: '#2563eb', icon: '🏢' },
-    'montparnasse': { name: 'Montparnasse, Paris', lat: 48.8412, lon: 2.3200, color: '#2563eb', icon: '🏢' },
-    'la-defense': { name: 'La Défense, Puteaux', lat: 48.8919, lon: 2.2381, color: '#2563eb', icon: '🏢' },
-    'saclay': { name: 'Plateau de Saclay', lat: 48.7118, lon: 2.1623, color: '#2563eb', icon: '🏢' },
-    'saint-denis': { name: 'Saint-Denis Pleyel', lat: 48.9205, lon: 2.3444, color: '#2563eb', icon: '🏢' },
-    'bibliotheque': { name: 'Bibliothèque F. Mitterrand, Paris', lat: 48.8299, lon: 2.3768, color: '#2563eb', icon: '🏢' },
-    'la-plaine': { name: 'La Plaine Saint-Denis, St-Denis', lat: 48.9066, lon: 2.3556, color: '#2563eb', icon: '🏢' }
+    'bastille': { name: 'Bastille, Paris', lat: 48.8532, lon: 2.3688, color: '#2563eb', icon: '' },
+    'saint-lazare': { name: 'Saint-Lazare, Paris', lat: 48.8752, lon: 2.3267, color: '#2563eb', icon: '' },
+    'montparnasse': { name: 'Montparnasse, Paris', lat: 48.8412, lon: 2.3200, color: '#2563eb', icon: '' },
+    'la-defense': { name: 'La Défense, Puteaux', lat: 48.8919, lon: 2.2381, color: '#2563eb', icon: '' },
+    'saclay': { name: 'Plateau de Saclay', lat: 48.7118, lon: 2.1623, color: '#2563eb', icon: '' },
+    'saint-denis': { name: 'Saint-Denis Pleyel', lat: 48.9205, lon: 2.3444, color: '#2563eb', icon: '' },
+    'bibliotheque': { name: 'Bibliothèque F. Mitterrand, Paris', lat: 48.8299, lon: 2.3768, color: '#2563eb', icon: '' },
+    'la-plaine': { name: 'La Plaine Saint-Denis, St-Denis', lat: 48.9066, lon: 2.3556, color: '#2563eb', icon: '' }
 };
 
 const CATEGORY_SOURCES = {
@@ -73,7 +73,7 @@ const CATEGORY_SOURCES = {
         { icon: "🗺️", title: "Institut Paris Région", year: "2021", desc: "Mode d'Occupation du Sol (MOS)" },
         { icon: "🔥", title: "Institut Paris Région", year: "2023", desc: "Classification des Îlots de Chaleur (ICU)" },
         { icon: "🔊", title: "Bruitparif", year: "2022", desc: "Cartographie du bruit routier et ferré" },
-        { icon: "🏢", title: "DGFIP", year: "2023", desc: "Fichiers Fonciers (Majic)" }
+        { icon: "", title: "DGFIP", year: "2023", desc: "Fichiers Fonciers (Majic)" }
     ],
     "socio": [
         { icon: "👥", title: "Filosofi - INSEE", year: "2021", desc: "Dispositif sur les revenus fiscaux et sociaux" },
@@ -502,31 +502,74 @@ function decodePolyline(str, precision = 6) {
     return coordinates;
 }
 
+window.renderWalkingPaths = function () {
+    const features = [];
+    const badges = [];
+
+    (window.activeWalkingPaths || []).forEach(path => {
+        path.sections.forEach((sec, sIdx) => {
+            const isTransit = ['rer', 'metro', 'bus', 'train', 'tram', 'transit', 'public_transport', 'on_demand_transport'].includes(sec.type);
+            const pathVisible = path.visible !== false;
+
+            // Base properties
+            const props = {
+                pathId: path.id,
+                color: sec.color || '#94a3b8',
+                weight: sec.weight || (isTransit ? 5 : 2),
+                isTransit: isTransit,
+                opacity: sec.opacity !== undefined ? sec.opacity : (pathVisible ? (isTransit ? 1 : 0.75) : 0),
+                type: sec.type
+            };
+
+            // Convert [[lat, lon], ...] to [[lon, lat], ...] for GeoJSON
+            const coordinates = (sec.shape || []).map(p => [p[1], p[0]]);
+            if (coordinates.length < 2) return;
+
+            features.push({
+                type: 'Feature',
+                geometry: { type: 'LineString', coordinates },
+                properties: props
+            });
+
+            // Transit Badge
+            if (isTransit && sec.code) {
+                const midIdx = Math.floor(coordinates.length / 2);
+                const idfm = idfmColors[sec.code] || { text: '#ffffff' };
+                badges.push({
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: coordinates[midIdx] },
+                    properties: {
+                        label: (sec.type === 'metro' ? 'M·' : sec.type === 'rer' ? 'RER·' : sec.type === 'tram' ? 'T·' : '') + sec.code,
+                        textColor: idfm.text,
+                        opacity: props.opacity > 0 ? 1 : 0
+                    }
+                });
+            }
+        });
+    });
+
+    if (window.map) {
+        const pathSource = window.map.getSource('walking-paths');
+        if (pathSource) pathSource.setData({ type: 'FeatureCollection', features });
+        
+        const badgeSource = window.map.getSource('walking-paths-badges');
+        if (badgeSource) badgeSource.setData({ type: 'FeatureCollection', features: badges });
+    }
+};
+
 window.updateWalkingPath = async function (props) {
     const irisName = props.nom_iris || props.nom_com || props.name || "Quartier inconnu";
     window.currentUpdateIrisCode = props.code;
     const thisUpdateIrisCode = props.code;
 
     console.log(`[DEBUG] updateWalkingPath for ${irisName} (${props.code})`);
-    if (!window.precomputedJourneysRaw) {
-        console.warn("[DEBUG] precomputedJourneysRaw is NOT LOADED YET!");
-    } else {
-        console.log(`[DEBUG] precomputedJourneysRaw has ${Object.keys(window.precomputedJourneysRaw).length} keys.`);
-    }
-
-    if (!window.walkingPathsGroup) {
-        window.walkingPathsGroup = L.layerGroup().addTo(window.map);
-    }
-    window.walkingPathsGroup.clearLayers();
-    window.activeWalkingPaths = []; 
-
-    // AGGRESSIVELY CLEAR ALL STATIC LAYERS TO AVOID OVERLAP
-    if (window.centreVilleLayer) window.centreVilleLayer.clearLayers();
-    if (window.stationsLayer) window.stationsLayer.clearLayers();
-    if (window.schoolsLayer) window.schoolsLayer.clearLayers();
-    if (window.mairiesLayer) window.mairiesLayer.clearLayers();
-    if (window.amenitiesLayer) window.amenitiesLayer.clearLayers();
-    if (window.commercesLayer) window.commercesLayer.clearLayers();
+    
+    // Clear existing paths
+    (window.activeWalkingPaths || []).forEach(p => {
+        if (p.markers) p.markers.forEach(m => m.remove());
+    });
+    window.activeWalkingPaths = [];
+    window.renderWalkingPaths();
 
     window.lastWalkingDuration = null;
     window.lastWalkingTarget = null;
@@ -535,704 +578,198 @@ window.updateWalkingPath = async function (props) {
     let startLon = props.lon;
 
     if (!startLat || !startLon) {
-        console.log("[DEBUG] Missing lat/lon in props, trying irisCentroids cache...");
         const cachedCentroid = window.irisCentroids?.[props.code];
         if (cachedCentroid) {
             startLat = cachedCentroid.lat;
             startLon = cachedCentroid.lon;
-        } else if (window.selectedLayer) {
-            const center = window.selectedLayer.getBounds().getCenter();
-            startLat = center.lat;
-            startLon = center.lng;
-            console.log(`[DEBUG] Found center from selectedLayer: ${startLat}, ${startLon}`);
         } else {
-            console.warn("[DEBUG] No start coordinates found and no selectedLayer!");
+            console.warn("[DEBUG] No start coordinates found!");
             return;
         }
     }
-    const targets = [];
 
+    const targets = [];
     const lineStations = {};
     const closestCenters = {};
 
-    // 1. All City Centers within 4km (Increased radius)
+    // 1. City Centers
     (window.cityCentersData?.features || []).forEach(f => {
         const centroid = turf.centroid(f).geometry.coordinates;
         const dist = getDistance(startLat, startLon, centroid[1], centroid[0]);
         if (dist <= 4000) {
-            const props = f.properties || {};
-            const name = props.name || props.NOM || "Centre";
-            const id = props.id || props.code || `${name}-${centroid[1]}-${centroid[0]}`;
-            
+            const p = f.properties || {};
+            const name = p.name || p.NOM || "Centre";
+            const id = p.id || p.code || `${name}-${centroid[1]}-${centroid[0]}`;
             if (!closestCenters[id] || dist < closestCenters[id].dist) {
-                // Get nearby commerce presence for this center
-                const localPoints = getNearbyPoints({ lat: centroid[1], lon: centroid[0] }, 500);
-                const am = {
-                    bio: localPoints.commerces.some(c => c.properties.category === 'bio'),
-                    bakery: localPoints.commerces.some(c => (c.properties.category || '').match(/bakery|boulangerie/i)),
-                    supermarket: localPoints.commerces.some(c => (c.properties.category || '').match(/supermarket|supermarché|alimentation|epicerie/i)),
-                    pharmacy: localPoints.amenities.some(c => c.properties.category === 'pharmacy'),
-                    bank: localPoints.amenities.some(c => c.properties.category === 'bank'),
-                    culture: localPoints.culture.length > 0 || localPoints.amenities.some(c => (c.properties.category || '').match(/cinema|theater|museum|theatre/i)),
-                    restaurant: localPoints.amenities.some(c => (c.properties.category || '').match(/restaurant|cafe|bar/i)) || localPoints.commerces.some(c => (c.properties.category || '').match(/restau/i))
-                };
-
                 closestCenters[id] = {
-                    id: id,
-                    name,
-                    lat: centroid[1],
-                    lon: centroid[0],
-                    dist,
-                    type: 'center',
-                    color: name.includes('Historique') ? '#b45309' : '#2563eb',
-                    icon: '📍',
-                    amenities: am
+                    id, name, lat: centroid[1], lon: centroid[0], dist, type: 'center',
+                    color: name.includes('Historique') ? '#b45309' : '#2563eb', icon: '📍'
                 };
             }
         }
     });
     targets.push(...Object.values(closestCenters));
 
-    // 2. Nearby Stations within 2.5km (unique per line)
+    // 2. Stations
     (window.allStationsData || []).forEach(s => {
         const dist = getDistance(startLat, startLon, s.lat, s.lon);
         if (dist <= 2500) {
-            // Robustly split multiple lines (e.g., "1,14" or "L/J")
             const rawLines = String(s.lines).split(/[,\/;]/).map(l => l.trim()).filter(Boolean);
-
             rawLines.forEach(rawLine => {
                 const lineId = window.getLineId(rawLine);
                 if (!lineId) return;
-
-                // Keep track of the closest station for this specific line
                 if (!lineStations[lineId] || dist < lineStations[lineId].dist) {
-                    let transitColor = '#059669';
                     const idfm = idfmColors[lineId];
-                    if (idfm) transitColor = idfm.bg;
-
                     lineStations[lineId] = {
                         id: `station-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
-                        name: s.name,
-                        lat: s.lat,
-                        lon: s.lon,
-                        dist,
-                        type: 'station',
-                        color: transitColor,
+                        name: s.name, lat: s.lat, lon: s.lon, dist, type: 'station',
+                        color: idfm ? idfm.bg : '#059669',
                         icon: (s.mode === 'METRO' || s.mode === 'METROPOLITAIN') ? '🚇' : (['RER', 'TRAIN', 'RER/TRAIN'].includes(s.mode) ? '🚆' : '🚋'),
-                        line: lineId,
-                        stationId: `${s.name}-${s.lat}-${s.lon}` // Unique key for the station itself
+                        line: lineId, stationId: `${s.name}-${s.lat}-${s.lon}`
                     };
                 }
             });
         }
     });
+    const uniqueStations = {};
+    Object.values(lineStations).forEach(s => { if (!uniqueStations[s.stationId] || s.dist < uniqueStations[s.stationId].dist) uniqueStations[s.stationId] = s; });
+    targets.push(...Object.values(uniqueStations));
 
-    // Deduplicate targets: if the same station is closest for multiple lines, we only want one itinerary
-    const uniqueStationWinners = {};
-    Object.values(lineStations).forEach(winner => {
-        if (!uniqueStationWinners[winner.stationId] || winner.dist < uniqueStationWinners[winner.stationId].dist) {
-            uniqueStationWinners[winner.stationId] = winner;
+    // 3. Workplaces
+    (window.activeWorkplaces || []).forEach(wp => {
+        const hub = (window.HUBS_COORDS || {})[wp.id];
+        if (hub) {
+            targets.push({ id: wp.id, name: hub.name, lat: hub.lat, lon: hub.lon, type: 'workplace', color: hub.color, icon: hub.icon });
         }
     });
 
-    targets.push(...Object.values(uniqueStationWinners));
-
-    // 3. Schools (Custom filtering logic)
-    const irisCode = props.code || "";
-    const communeCode = irisCode.substring(0, 5);
-    
-    // Large radius search to capture all city schools and neighboring lycées
+    // 4. Schools
     const schoolPoints = getNearbyPoints(props.code, 10000).schools || [];
     schoolPoints.forEach(f => {
         const coords = f.geometry.coordinates;
         if (!coords) return;
         const [lon, lat] = coords;
         const dist = getDistance(startLat, startLon, lat, lon);
-        
-        const cat = (f.properties?.category || f.properties?.type || "").toLowerCase();
-        const nameStr = (f.properties?.name || f.properties?.nom_etablissement || "").toLowerCase();
-        const isPrivate = (f.properties?.sector || "").toLowerCase().includes('privé');
-        const isPublic = !isPrivate;
-        const schoolCommuneCode = (f.irisCode || "").substring(0, 5);
-        const schoolCityName = (f.properties?.nom_com || f.properties?.commune || "").toLowerCase();
-        const targetCityName = (props.nom_com || props.commune || "").toLowerCase();
-
-        const isLycee = cat.includes('lycée') || cat.includes('lycee') || nameStr.includes('lycée') || nameStr.includes('lycee');
-        const isCollege = cat.includes('collège') || cat.includes('college') || nameStr.includes('collège') || nameStr.includes('college');
-        const isPrimary = cat.includes('maternelle') || cat.includes('élémentaire') || cat.includes('elementaire') || cat.includes('primaire') || nameStr.includes('maternelle') || nameStr.includes('élémentaire');
-
-        let shouldInclude = false;
-        let color = '#9333ea';
-        let icon = '🏫';
-
-        const isSameCity = (schoolCommuneCode === communeCode) || (targetCityName && schoolCityName && targetCityName === schoolCityName);
-
-        if (isLycee) {
-            // Lycées: same city or bordering cities (approx < 7km)
-            if (isSameCity || dist <= 7000) {
-                shouldInclude = true;
-                color = '#10b981';
-                icon = '🎓';
-            }
-        } else if (isPublic) {
-            // Public Maternelle/Elém/Collège: same city ONLY (or very close fallback)
-            if (isSameCity || dist <= 1500) {
-                shouldInclude = true;
-                if (isCollege) { color = '#3b82f6'; icon = '📚'; }
-                else if (cat.includes('maternelle')) { color = '#ec4899'; icon = '👶'; }
-            }
-        } else if (isPrivate) {
-            // Private Schools: 3.5km radius
-            if (dist <= 3500) {
-                shouldInclude = true;
-                if (isCollege) { color = '#3b82f6'; icon = '📚'; }
-                else if (cat.includes('maternelle')) { color = '#ec4899'; icon = '👶'; }
-            }
-        }
-
-        if (shouldInclude) {
+        const name = f.properties.name || "École";
+        const cat = (f.properties?.category || "").toLowerCase();
+        if (dist <= 3500) {
             targets.push({
-                id: `school-${f.properties.id || f.id || Math.random().toString(36).substr(2, 9)}`,
-                name: f.properties.name || "École",
-                lat: lat,
-                lon: lon,
-                dist,
-                type: 'school',
-                isPrivate: isPrivate,
-                color: color,
-                icon: icon,
-                ips: f.properties.ips || 0
+                id: `school-${f.id || Math.random()}`, name, lat, lon, dist, type: 'school',
+                color: cat.includes('lycée') ? '#10b981' : '#9333ea', icon: '🏫'
             });
         }
     });
 
-    const hubs = window.HUBS_COORDS || {};
+    const finalTargets = targets.sort((a, b) => (a.dist || 0) - (b.dist || 0)).slice(0, 40);
 
-    activeWorkplaces.forEach(wp => {
-        const config = hubs[wp.id];
-        if (config) {
-            targets.push({
-                id: wp.id,
-                name: config.name,
-                lat: config.lat,
-                lon: config.lon,
-                type: 'workplace',
-                color: config.color,
-                icon: config.icon
-            });
-        }
-    });
-
-    // Final filter: remove schools if in Vie de Quartier category
-    const finalTargets = targets.filter(t => {
-        if (window.activeAccordion === 'vieQuartier' && t.type === 'school') return false;
-        return true;
-    });
-
-    finalTargets.sort((a, b) => (a.dist || 0) - (b.dist || 0));
-    const topTargets = finalTargets.slice(0, 80); 
-
-    const labelPositions = []; 
-    const activeAccordion = window.activeAccordion;
-    
-    for (const [idx, target] of topTargets.entries()) {
+    for (const target of finalTargets) {
         try {
+            if (window.currentUpdateIrisCode !== thisUpdateIrisCode) return;
+
             let sections = [];
             let duration = 0;
-            let tripLength = 0;
-            // USE the resolved startLat/startLon from outer scope, DO NOT shadow them!
 
-            // Try cache first
             const rawCache = window.precomputedJourneysRaw?.[props.code]?.[target.id];
             const preferredKey = window.commuteItineraryType || 'main';
             const cached = (rawCache && rawCache[preferredKey]) ? rawCache[preferredKey] : ((rawCache && rawCache.main) ? rawCache.main : rawCache);
 
-            if (cached) {
-                console.log(`[DEBUG] Polyline Cache HIT for ${props.code} -> ${target.id}`, {
-                    sections: cached.sections?.length,
-                    hasLegacyShape: !!cached.shape
-                });
-            } else {
-                console.log(`[DEBUG] Polyline Cache MISS for ${props.code} -> ${target.id}`);
-            }
-
             if (cached && (cached.sections || cached.itinerary)) {
-                // Sanitize: strip null coords from every section
-                const rawSections = (cached.sections || cached.itinerary).map(sec => ({
+                sections = (cached.sections || cached.itinerary).map(sec => ({
                     ...sec,
-                    shape: (sec.shape || []).filter(p => p && p[0] !== null && p[1] !== null && typeof p[0] === 'number' && typeof p[1] === 'number')
+                    shape: (sec.shape || []).filter(p => p && p[0] !== null && p[1] !== null)
                 }));
-
-                // For empty walking/street_network sections, inject straight-line bridges
-                sections = rawSections.map((sec, i) => {
-                    if (sec.shape && sec.shape.length > 0) return sec; // already valid, keep as-is
-                    if (sec.type !== 'walking' && sec.type !== 'street_network') return null; // non-walking with no shape → drop
-
-                    // Find the anchor points to bridge
-                    let bridgeStart = null;
-                    let bridgeEnd = null;
-
-                    // Start of bridge: end of previous section, or IRIS centroid
-                    for (let j = i - 1; j >= 0; j--) {
-                        const prev = rawSections[j];
-                        if (prev && prev.shape && prev.shape.length > 0) { bridgeStart = prev.shape[prev.shape.length - 1]; break; }
-                    }
-                    if (!bridgeStart) bridgeStart = [startLat, startLon];
-
-                    // End of bridge: start of next section, or target destination
-                    for (let j = i + 1; j < rawSections.length; j++) {
-                        const next = rawSections[j];
-                        if (next && next.shape && next.shape.length > 0) { bridgeEnd = next.shape[0]; break; }
-                    }
-                    if (!bridgeEnd) bridgeEnd = [target.lat, target.lon];
-
-                    return { ...sec, shape: [bridgeStart, bridgeEnd] };
-                }).filter(Boolean);
-
                 duration = cached.duration;
-            } else if (cached && cached.shape && !cached.itinerary) {
-                // Backwards compatibility for single-shape cache (only if no itinerary to guide us)
-                const type = target.type === 'workplace' ? 'transit' : 'walking';
-                sections = [{ type, shape: cached.shape.filter(p => p && p[0] !== null && p[1] !== null), color: target.color }];
-                duration = cached.duration;
-                console.log(`[DEBUG] Using legacy shape for ${target.id}`);
-            } else {
-                if (target.type === 'workplace') {
-                    console.log(`[DEBUG] Fetching IDFM itinerary for workplace: ${target.name}`);
-                    const url = `https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/journeys?from=${startLon};${startLat}&to=${target.lon};${target.lat}&data_freshness=base_schedule`;
-                    const response = await fetch(url, { headers: { 'apikey': '41Yg0ZQ1MuGlIHfwEXrY0vGFhjQKngcv' } });
-                    const data = await response.json();
-
-                    if (data.journeys && data.journeys.length > 0) {
-                        const j = data.journeys[0];
-                        duration = Math.round(j.duration / 60);
-                        console.log(`[DEBUG] Received ${j.sections.length} sections from IDFM`);
-                        j.sections.forEach((s, sIdx) => {
-                            let sectionShape = [];
-                            let source = "none";
-
-                            // L'API Navitia/IDFM met toujours le tracé dans "geojson", quel que soit le mode de transport !
-                            if (s.geojson && s.geojson.coordinates) {
-                                source = "geojson";
-                                sectionShape = s.geojson.coordinates
-                                    .filter(c => c && c.length >= 2 && c[0] !== null && c[1] !== null)
-                                    .map(c => [c[1], c[0]]); // On inverse [Longitude, Latitude] vers [Latitude, Longitude] pour Leaflet
-                            }
-                            // Fallback de sécurité au cas où l'API utilise 'path'
-                            else if (s.path && Array.isArray(s.path)) {
-                                source = "path";
-                                sectionShape = s.path
-                                    .filter(p => p && p.lat !== undefined && p.lng !== undefined)
-                                    .map(p => [p.lat, p.lng]);
-                            }
-
-                            if (sectionShape.length > 0) {
-                                console.log(`  - Section ${sIdx} (${s.type}): Found ${sectionShape.length} points via ${source}`);
-                                let type = s.type;
-                                let color = '#94a3b8';
-                                let code = '';
-                                if (s.display_informations) {
-                                    color = `#${s.display_informations.color || '2563eb'}`;
-                                    code = s.display_informations.code || '';
-                                    const mode = (s.display_informations.commercial_mode || s.display_informations.physical_mode || '').toLowerCase();
-                                    const net = (s.display_informations.network || '').toLowerCase();
-                                    if (mode.includes('rer') || net.includes('rer')) type = 'rer';
-                                    else if (mode.includes('metro') || net.includes('metro')) type = 'metro';
-                                    else if (mode.includes('bus') || net.includes('bus')) type = 'bus';
-                                    else if (mode.includes('tram') || net.includes('tram')) type = 'tram';
-                                    else if (mode.includes('train') || mode.includes('rail') || net.includes('sncf')) type = 'train';
-                                    else type = 'public_transport'; // Unclassified transit — still a transit leg
-                                }
-                                sections.push({
-                                    type,
-                                    color,
-                                    code,
-                                    shape: sectionShape,
-                                    duration: Math.round((s.duration || 0) / 60)
-                                });
-                            }
-                        });
-                    }
-                } else {
-                    // Walking path calculation
-                    // Fallback to estimation for many targets to avoid API throttling
-                    const useEstimation = (target.type === 'school' && idx >= 12);
-                    
-                    if (useEstimation) {
-                        const estimatedDist = dist * 1.35; // 1.35 average urban detour factor
-                        duration = Math.round((estimatedDist / 1.33) / 60); // 1.33 m/s (approx 4.8 km/h)
-                        tripLength = Math.round(estimatedDist);
-                        sections = [{ type: 'walking', shape: [[startLat, startLon], [target.lat, target.lon]], color: '#94a3b8', duration: duration }];
-                    } else {
-                        const response = await fetch(`https://valhalla1.openstreetmap.de/route?json={"locations":[{"lat":${startLat},"lon":${startLon}},{"lat":${target.lat},"lon":${target.lon}}],"costing":"pedestrian"}`);
-                        const data = await response.json();
-                        if (data.trip && data.trip.legs) {
-                            const shape = data.trip.legs[0].shape;
-                            const coords = decodePolyline(shape);
-                            sections = [{ type: 'walking', shape: coords, color: '#94a3b8', duration: Math.round(data.trip.summary.time / 60) }];
-                            duration = Math.round(data.trip.summary.time / 60);
-                            tripLength = Math.round(data.trip.summary.length * 1000);
+            } else if (target.type === 'workplace') {
+                const url = `https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia/journeys?from=${startLon};${startLat}&to=${target.lon};${target.lat}&data_freshness=base_schedule`;
+                const response = await fetch(url, { headers: { 'apikey': '41Yg0ZQ1MuGlIHfwEXrY0vGFhjQKngcv' } });
+                const data = await response.json();
+                if (data.journeys?.length > 0) {
+                    const j = data.journeys[0];
+                    duration = Math.round(j.duration / 60);
+                    j.sections.forEach(s => {
+                        if (s.geojson?.coordinates) {
+                            sections.push({
+                                type: s.type, color: s.display_informations ? `#${s.display_informations.color}` : '#94a3b8',
+                                code: s.display_informations?.code,
+                                shape: s.geojson.coordinates.map(c => [c[1], c[0]]),
+                                duration: Math.round(s.duration / 60)
+                            });
                         }
-                    }
+                    });
+                }
+            } else {
+                const response = await fetch(`https://valhalla1.openstreetmap.de/route?json={"locations":[{"lat":${startLat},"lon":${startLon}},{"lat":${target.lat},"lon":${target.lon}}],"costing":"pedestrian"}`);
+                const data = await response.json();
+                if (data.trip?.legs) {
+                    const coords = decodePolyline(data.trip.legs[0].shape);
+                    sections = [{ type: 'walking', shape: coords, color: '#94a3b8', duration: Math.round(data.trip.summary.time / 60) }];
+                    duration = Math.round(data.trip.summary.time / 60);
                 }
             }
 
             if (sections.length > 0) {
-                const pathId = `path-${idx}`;
-                const pathPolylines = [];
-                const pathMarkers = [];
-
-                const showSchoolsPill = document.getElementById('show-schools')?.checked || document.getElementById('group-infra')?.checked;
+                const pathId = `path-${target.id}`;
                 const shouldBeVisible = (window.activeAccordion === 'commute' && target.type === 'workplace') ||
-                    (window.activeAccordion === 'vieQuartier' && (target.type === 'center' || target.type === 'school')) ||
-                    (target.type === 'school' && showSchoolsPill);
+                    (window.activeAccordion === 'vieQuartier' && target.type === 'center');
 
-                // On force l'opacité à 0 pour les stations en mode mobilité (le Hover s'occupera de l'afficher)
-                const isMobilityOrInfraMode = (window.activeAccordion === 'mobility' || window.activeAccordion === 'infra');
-                const initialOpacity = (isMobilityOrInfraMode && target.type === 'station') ? 0 : (shouldBeVisible ? 1 : 0);
-
-                console.log(`[DEBUG] Rendering path for ${target.name} (${target.type}). Visible: ${shouldBeVisible}, Initial Opacity: ${initialOpacity}`);
-
-                sections.forEach((sec, sIdx) => {
-                    const isTransit = ['rer', 'metro', 'bus', 'train', 'tram', 'transit', 'public_transport', 'on_demand_transport'].includes(sec.type);
-                    if (!sec.shape || sec.shape.length === 0) {
-                        console.warn(`[DEBUG] Section ${sIdx} (${sec.type}) has NO SHAPE DATA!`);
-                        return;
-                    }
-                    // Robust coordinate check — skip sections with coordinates outside France
-                    const isInvalid = sec.shape.some(p => p[0] < 40 || p[0] > 52 || p[1] < -5 || p[1] > 10);
-                    if (isInvalid) {
-                        console.error(`[DEBUG] CRITICAL: Section ${sIdx} has coordinates OUTSIDE FRANCE!`, sec.shape[0]);
-                        return; // Skip rendering this section entirely
-                    }
-
-                    if (window.currentUpdateIrisCode !== thisUpdateIrisCode) return;
-
-                    // SNAP: Ensure the path starts EXACTLY at the iris centroid (human icon)
-                    if (sIdx === 0 && sec.shape.length > 0) {
-                        const firstPoint = sec.shape[0];
-                        const d = getDistance(startLat, startLon, firstPoint[0], firstPoint[1]);
-                        if (d < 500) { // If within 500m, snap it to the icon center
-                            sec.shape[0] = [startLat, startLon];
-                        }
-                    }
-
-                    // --- Per-leg styling ---
-                    const lineColor = sec.color || '#94a3b8';
-                    // Get official text color if available via code lookup
-                    const idfmEntry = sec.code ? idfmColors[sec.code] : null;
-                    const badgeTextColor = idfmEntry ? idfmEntry.text : '#ffffff';
-
-                    let polyWeight, polyDash, polyOpacity;
-                    if (isTransit) {
-                        polyWeight = 5;
-                        polyDash = null;
-                        polyOpacity = shouldBeVisible ? 1 : 0;
-                    } else if (sec.type === 'transfer') {
-                        polyWeight = 2;
-                        polyDash = '2, 5';
-                        polyOpacity = shouldBeVisible ? 0.6 : 0;
-                    } else {
-                        // walking / street_network
-                        polyWeight = 2;
-                        polyDash = '5, 8';
-                        polyOpacity = shouldBeVisible ? 0.75 : 0;
-                    }
-
-                    // For transit legs: draw a white outline beneath for visual separation
-                    if (isTransit) {
-                        const outlinePoly = L.polyline(sec.shape, {
-                            color: '#ffffff',
-                            weight: polyWeight + 3,
-                            opacity: shouldBeVisible ? 0.85 : 0,
-                            lineCap: 'round',
-                            lineJoin: 'round',
-                            pane: 'walkingPathsPane',
-                            interactive: false
-                        }).addTo(window.walkingPathsGroup);
-                        outlinePoly._isOutline = true;
-                        outlinePoly._outlineOpacity = 0.85;
-                        pathPolylines.push(outlinePoly); // track so it toggles with the path
-                    }
-
-                    const poly = L.polyline(sec.shape, {
-                        color: lineColor,
-                        weight: polyWeight,
-                        dashArray: polyDash,
-                        opacity: polyOpacity,
-                        lineCap: 'round',
-                        lineJoin: 'round',
-                        pane: 'walkingPathsPane',
-                        className: `walking-path ${pathId} sec-${sIdx}`,
-                        interactive: false
-                    }).addTo(window.walkingPathsGroup);
-
-                    // Store the original weight on the polyline for later highlight toggling
-                    poly._originalWeight = polyWeight;
-                    poly._originalOpacity = polyOpacity;
-                    pathPolylines.push(poly);
-
-                    // Add line badge for transit sections
-                    if (isTransit && sec.code) {
-                        const midIdx = Math.floor(sec.shape.length / 2);
-                        const midPoint = sec.shape[midIdx];
-                        const modePrefix = sec.type === 'metro' ? 'M·' : sec.type === 'rer' ? 'RER·' : sec.type === 'tram' ? 'T·' : '';
-                        const badgeBg = idfmEntry ? idfmEntry.bg : lineColor;
-                        const badgeLabel = `${modePrefix}${sec.code}`;
-                        const iconHtml = `<div style="position:relative;width:0;height:0;"><div style="
-                            position: absolute;
-                            left: 50%; top: 50%;
-                            transform: translate(-50%, -50%);
-                            background: ${badgeBg};
-                            color: ${badgeTextColor};
-                            padding: 3px 8px;
-                            border-radius: 20px;
-                            font-size: 9px;
-                            font-weight: 900;
-                            white-space: nowrap;
-                            border: 2px solid white;
-                            box-shadow: 0 2px 8px rgba(0,0,0,0.35);
-                            opacity: ${shouldBeVisible ? 1 : 0};
-                            letter-spacing: 0.04em;
-                            pointer-events: none;
-                            line-height: 1;
-                        ">${badgeLabel}</div></div>`;
-                        if (window.currentUpdateIrisCode !== thisUpdateIrisCode) return;
-                        const iconMarker = L.marker(midPoint, {
-                            icon: L.divIcon({ className: '', html: iconHtml, iconSize: [0, 0] }),
-                            interactive: false,
-                            pane: 'walkingPathsPane'
-                        }).addTo(window.walkingPathsGroup);
-                        pathMarkers.push(iconMarker);
-                    }
-
-                });
-
-                // Add walking icon at start if walking
-                if (sections[0].type === 'walking' || sections[0].type === 'street_network') {
-                    const startPoint = sections[0].shape[0];
-                    if (window.currentUpdateIrisCode !== thisUpdateIrisCode) return;
-                    const walkMarker = L.marker(startPoint, {
-                        icon: L.divIcon({ className: '', html: `<div class="walk-icon" style="font-size: 14px; opacity: ${shouldBeVisible ? 0.8 : 0}; transform: translate(-50%, -50%);">🚶</div>`, iconSize: [0, 0] }),
-                        interactive: false,
-                        pane: 'walkingPathsPane'
-                    }).addTo(window.walkingPathsGroup);
-                    pathMarkers.push(walkMarker);
-                }
-
-                const lastSection = sections[sections.length - 1];
-                const destPoint = lastSection.shape[lastSection.shape.length - 1];
-
-                // Store type in the polylines for later filtering if needed
-                pathPolylines.forEach(p => {
-                    p.pathType = target.type;
-                    p.pathName = target.name;
-                });
-
-                // Add Label at Destination
-
-                // Avoid simple overlap by checking previous labels
-                let yOffset = -5;
-                let xOffset = 0;
-                for (const pos of labelPositions) {
-                    const d = getDistance(destPoint[0], destPoint[1], pos[0], pos[1]);
-                    if (d < 50) { // If too close in meters (approx)
-                        yOffset -= 25; // Stack vertically
-                    }
-                }
-                labelPositions.push(destPoint);
-
-                const distanceMeters = Math.round(tripLength || getDistance(startLat, startLon, target.lat, target.lon));
-
-                const isInteractive = ['school', 'center', 'station'].includes(target.type);
+                // Label Marker
+                const el = document.createElement('div');
+                el.className = `path-label ${pathId}-label`;
+                el.style.cssText = `background:${target.color};color:white;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:800;white-space:nowrap;opacity:${shouldBeVisible ? 1 : 0};transition:all 0.2s;`;
+                el.innerHTML = `<span>${target.icon}</span> ${duration} min`;
                 
-                // FORCE HIDE STATIC MARKERS IF INTERACTIVE LABELS ARE ACTIVE
-                if (isInteractive && window.centreVilleLayer) window.centreVilleLayer.clearLayers();
-                if (isInteractive && window.stationsLayer) window.stationsLayer.clearLayers();
-                if (isInteractive && window.schoolsLayer) window.schoolsLayer.clearLayers();
-                const isSchool = target.type === 'school';
-                const isCenter = target.type === 'center';
-                const isStation = target.type === 'station';
+                const marker = new maplibregl.Marker({ element: el })
+                    .setLngLat([target.lon, target.lat])
+                    .addTo(window.map);
 
-                // Extra info logic
-                let extraHtml = '';
-                if (isSchool) {
-                    extraHtml = `<span class="ips-label" style="display: inline-flex; align-items: center; margin-left: 5px; font-size: 9px; opacity: 0.8;"> - IPS: ${target.ips || 'N/A'}</span>
-                                 ${target.isPrivate ? `<span class="private-badge" style="font-size: 8px; background: rgba(255,255,255,0.2); padding: 1px 4px; border-radius: 4px; margin-left: 4px; border: 1px solid rgba(255,255,255,0.4); display: inline-flex;">Privé</span>` : ''}`;
-                } else if (isCenter && target.amenities) {
-                    const am = target.amenities;
-                    const icons = [
-                        { key: 'bio', icon: '🌱' },
-                        { key: 'bakery', icon: '🥖' },
-                        { key: 'supermarket', icon: '🛒' },
-                        { key: 'pharmacy', icon: '💊' },
-                        { key: 'bank', icon: '🏦' },
-                        { key: 'culture', icon: '🎭' },
-                        { key: 'restaurant', icon: '🍴' }
-                    ];
-                    extraHtml = `<div class="amenity-icons" style="display: inline-flex; gap: 3px; margin-left: 5px; align-items: center;">
-                        ${icons.map(i => `<span style="opacity: ${am[i.key] ? 1 : 0.2}; filter: ${am[i.key] ? 'none' : 'grayscale(100%)'}; font-size: 11px; line-height: 1;">${i.icon}</span>`).join('')}
-                    </div>`;
-                } else if (isStation && target.line) {
-                    const line = target.line;
-                    const idfm = idfmColors[line] || { bg: '#666', text: '#fff' };
-                    extraHtml = `<span class="station-line-badge" style="background: ${idfm.bg}; color: ${idfm.text}; padding: 1px 5px; border-radius: 4px; font-size: 8px; margin-left: 5px; border: 1px solid rgba(255,255,255,0.3);">L.${line}</span>`;
-                }
-
-                const labelIcon = L.divIcon({
-                    className: '', 
-                    html: `<div style="position: relative; overflow: visible; width: 0; height: 0;">
-                             <div class="path-label ${pathId}-label ${isInteractive ? 'interactive-path-label' : ''}" 
-                                  style="background: ${target.color}; color: white; position: absolute; transform: translate(12px, -50%); margin-top: ${yOffset}px; opacity: ${(shouldBeVisible && map.getZoom() >= 12) ? 1 : 0}; pointer-events: ${isInteractive ? 'auto' : 'none'}; cursor: ${isInteractive ? 'pointer' : 'default'};">
-                               
-                               <div class="compact-content" style="display: flex; align-items: center; gap: 6px; white-space: nowrap;">
-                                 <span class="type-icon" style="font-size: 13px; line-height: 1;">${target.icon}</span>
-                                 <span class="time-label" style="font-size: 10px; font-weight: 800;">${duration} min</span>
-                                 <span class="full-name" style="display: none; margin-left: 5px; font-size: 11px; font-weight: 700;">${target.name}</span>
-                                 ${isInteractive ? extraHtml : ''}
-                               </div>
-                             </div>
-                           </div>`,
-                    iconSize: [0, 0],
-                    iconAnchor: [0, 0]
+                window.activeWalkingPaths.push({
+                    id: pathId, targetId: target.id, type: target.type, name: target.name, color: target.color,
+                    sections, duration, visible: shouldBeVisible, markers: [marker]
                 });
 
-                if (window.currentUpdateIrisCode !== thisUpdateIrisCode) return;
-                const marker = L.marker(destPoint, {
-                    icon: labelIcon,
-                    interactive: false,
-                    pane: 'walkingPathsPane'
-                }).addTo(window.walkingPathsGroup);
-
-                // Wait for marker to be added to DOM to find the label element
-                // Actually, we can find it by class once it's rendered, but better to do it lazily in highlightPath or store it here.
-                // Since markers are added to a layerGroup, they might not have an element yet.
-
-                // RACE CONDITION CHECK: If another IRIS was selected while we were fetching, STOP.
-                if (window.currentUpdateIrisCode !== thisUpdateIrisCode) {
-                    console.log(`[DEBUG] Aborting updateWalkingPath for ${thisUpdateIrisCode} (new request: ${window.currentUpdateIrisCode})`);
-                    return;
-                }
-
-                const pathObj = {
-                    id: pathId,
-                    name: target.name,
-                    type: target.type,
-                    icon: target.icon,
-                    duration,
-                    distance: distanceMeters,
-                    color: target.color,
-                    polylines: pathPolylines,
-                    markers: pathMarkers,
-                    destMarker: marker
-                };
-                console.log(`[DEBUG] Adding path to activeWalkingPaths: ${pathId} (${target.name})`, pathObj);
-                window.activeWalkingPaths.push(pathObj);
-
-                // If it's the primary center, update the info panel
                 if (target.type === 'center' && !window.lastWalkingDuration) {
                     window.lastWalkingDuration = duration;
                     window.lastWalkingTarget = target.name;
                 }
-
             }
         } catch (e) { console.error("Path error:", e); }
     }
 
-    // Update the sidebar ONCE after all paths are loaded/processed
-    if (selectedLayer && (selectedLayer.feature.id || selectedLayer.feature.properties.code) === props.code) {
+    window.renderWalkingPaths();
+    if (window.selectedLayer && (window.selectedLayer.feature.properties.code === props.code)) {
         info.update(props, true);
     }
-
-    // Ensure the paths match the current contextual category
-    if (window.activeAccordion && window.highlightAllWalkingPaths) {
-        if (window.activeAccordion === 'commute') window.highlightAllWalkingPaths(true, 'workplace');
-        else if (window.activeAccordion === 'vieQuartier') {
-            window.highlightAllWalkingPaths(true, ['center']); // Removed school
-        }
-        else if (window.activeAccordion === 'mobility' || window.activeAccordion === 'infra') window.highlightAllWalkingPaths(true, 'station');
-        else window.highlightAllWalkingPaths(false);
-    }
 };
 
-window.highlightPath = function (pathId, highlight, pathObj = null) {
-    if (!pathObj) {
-        pathObj = window.activeWalkingPaths?.find(p => p.id === pathId);
+window.highlightPath = function (pathId, highlight) {
+    const path = (window.activeWalkingPaths || []).find(p => p.id === pathId);
+    if (!path) return;
+
+    path.visible = highlight;
+    if (path.markers) {
+        path.markers.forEach(m => {
+            const el = m.getElement();
+            if (el) {
+                el.style.opacity = highlight ? '1' : '0';
+                el.style.transform = highlight ? 'scale(1.1)' : 'scale(1)';
+            }
+        });
     }
-    if (!pathObj) return;
-
-    console.log(`[DEBUG] highlightPath: ${pathId} (${pathObj.name}), highlight: ${highlight}, type: ${pathObj.type}`);
-
-    const effectiveHighlight = highlight;
-
-    if (effectiveHighlight) {
-        if (pathObj.polylines) {
-            pathObj.polylines.forEach(p => {
-                if (p._isOutline) {
-                    p.setStyle({ opacity: p._outlineOpacity ?? 0.85 });
-                } else {
-                    p.setStyle({ opacity: p._originalOpacity ?? 1, weight: p._originalWeight ?? 3 });
-                }
-            });
-        }
-        if (pathObj.markers) {
-            pathObj.markers.forEach(m => {
-                const el = m.getElement();
-                if (el) {
-                    const icon = el.querySelector('div');
-                    if (icon) icon.style.opacity = '1';
-                }
-            });
-        }
-        if (pathObj.destMarker) {
-            if (!pathObj.labelEl) {
-                pathObj.labelEl = document.querySelector(`.${pathId}-label`);
-            }
-            const label = pathObj.labelEl;
-            if (label) {
-                label.style.opacity = '1';
-                label.style.transform = 'translate(12px, -50%) scale(1.1)';
-                label.style.zIndex = '1000';
-                label.style.boxShadow = `0 8px 24px ${pathObj.color}44`;
-            }
-        }
-    } else {
-        if (pathObj.polylines) {
-            pathObj.polylines.forEach(p => p.setStyle({ opacity: 0 }));
-        }
-        if (pathObj.markers) {
-            pathObj.markers.forEach(m => {
-                const el = m.getElement();
-                if (el) {
-                    const icon = el.querySelector('div');
-                    if (icon) icon.style.opacity = '0';
-                }
-            });
-        }
-        if (pathObj.destMarker) {
-            if (!pathObj.labelEl) {
-                pathObj.labelEl = document.querySelector(`.${pathId}-label`);
-            }
-            const label = pathObj.labelEl;
-            if (label) {
-                label.style.opacity = '0';
-                label.style.transform = 'translate(12px, -50%) scale(1)';
-                label.style.zIndex = 'auto';
-                label.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-            }
-        }
-    }
+    window.renderWalkingPaths();
 };
+
 
 window.updateWalkingLabelsZoom = function () {
-    if (!window.walkingPathsGroup) return;
+    if (!window.map) return;
     const zoom = window.map.getZoom();
-    const isHighZoom = zoom >= 12;
+    const isHighZoom = zoom >= 11.5;
 
-    document.querySelectorAll('.path-label > div').forEach(el => {
+    document.querySelectorAll('.path-label').forEach(el => {
         el.style.opacity = isHighZoom ? '1' : '0';
+        el.style.pointerEvents = isHighZoom ? 'auto' : 'none';
     });
 };
+
 
 window.activeScoreFilters = {
     'excellent': true,
@@ -1570,71 +1107,446 @@ window.renderWorkplaces = function () {
     }).join('');
 };
 
-// --- MAP INIT ---
-const map = L.map('map', {
-    zoomControl: false,
-    preferCanvas: false // 🔴 1. On désactive le canvas global ici
-}).setView([48.861, 2.443], 12);
-
-map.createPane('naturePane');
-map.getPane('naturePane').style.zIndex = 350;
-map.getPane('naturePane').style.pointerEvents = 'none';
-
-map.createPane('neighborhoods');
-map.getPane('neighborhoods').style.zIndex = 400;
-
-map.createPane('cityCentersPane');
-map.getPane('cityCentersPane').style.zIndex = 402;
-map.getPane('cityCentersPane').style.pointerEvents = 'none';
-
-map.createPane('transitLinesPane');
-map.getPane('transitLinesPane').style.zIndex = 405;
-map.getPane('transitLinesPane').style.pointerEvents = 'none';
-
-map.createPane('poiPane');
-map.getPane('poiPane').style.zIndex = 650;
-
-map.createPane('noisePane');
-map.getPane('noisePane').style.zIndex = 460;
-map.getPane('noisePane').style.pointerEvents = 'none';
-
-map.createPane('topPane');
-map.getPane('topPane').style.zIndex = 650;
-
-map.on('click', () => {
-    document.querySelectorAll('.city-center-marker-container.active').forEach(c => c.classList.remove('active'));
+// --- MAPLIBRE GL JS INITIALIZATION ---
+const map = new maplibregl.Map({
+    container: 'map',
+    style: {
+        version: 8,
+        sources: {
+            'raster-tiles': {
+                type: 'raster',
+                tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'],
+                tileSize: 256,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            }
+        },
+        layers: [
+            {
+                id: 'simple-tiles',
+                type: 'raster',
+                source: 'raster-tiles',
+                minzoom: 0,
+                maxzoom: 20
+            }
+        ]
+    },
+    center: [2.443, 48.861],
+    zoom: 11,
+    antialias: true
 });
-map.getPane('topPane').style.pointerEvents = 'none';
-
-map.createPane('walkingPathsPane');
-map.getPane('walkingPathsPane').style.zIndex = 800;
-map.getPane('walkingPathsPane').style.pointerEvents = 'none';
-
-// 👇 2. C'EST ICI QU'IL FAUT AJOUTER LES RENDERERS (Juste avant window.map = map;)
-window.walkingRenderer = L.svg({ pane: 'walkingPathsPane' });
-window.neighborhoodsRenderer = L.svg({ pane: 'neighborhoods' });
-window.transitRenderer = L.svg({ pane: 'transitLinesPane' });
-window.cityCentersRenderer = L.svg({ pane: 'cityCentersPane' });
-window.natureRenderer = L.svg({ pane: 'naturePane' });
-window.noiseRenderer = L.svg({ pane: 'noisePane' });
-window.topRenderer = L.svg({ pane: 'topPane' });
-window.poiRenderer = L.svg({ pane: 'poiPane' });
 
 window.map = map;
-window.hoverCityLayer = L.layerGroup().addTo(map);
+
+// Layer ID constants
+const MAP_LAYERS = {
+    NEIGHBORHOODS_FILL: 'neighborhoods-fill',
+    NEIGHBORHOODS_LINE: 'neighborhoods-line',
+    HIGHLIGHT_FILL: 'highlight-fill',
+    HIGHLIGHT_LINE: 'highlight-line',
+    PATHS: 'paths-layer',
+    MARKERS: 'markers-layer'
+};
+
+    map.on('load', () => {
+        console.log("🚀 MapLibre Ready");
+        
+        // Add Hover State variable
+        window.hoveredFeatureId = null;
+
+        // Setup Sources ...
+    map.addSource('neighborhoods', { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, generateId: true });
+    map.addSource('commune-highlight', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addSource('paths', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addSource('centroid', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addSource('proximity', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+    // POI Sources
+    ['stations', 'schools', 'commerces', 'amenities', 'culture', 'sport', 'transactions', 'city-centers'].forEach(cat => {
+        map.addSource(cat, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    });
+
+    // Aura Sources (Perimeters)
+    ['city-centers-aura', 'walking-paths', 'walking-paths-badges'].forEach(cat => {
+        map.addSource(cat, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    });
+
+
+
+
+    // 1. Neighborhoods (Base)
+    map.addLayer({
+        id: MAP_LAYERS.NEIGHBORHOODS_FILL,
+        type: 'fill',
+        source: 'neighborhoods',
+        paint: {
+            'fill-color': ['coalesce', ['get', 'fillColor'], 'transparent'],
+            'fill-opacity': [
+                'case',
+                ['boolean', ['feature-state', 'hover'], false],
+                0.8,
+                0.55
+            ]
+        }
+    });
+
+    // Interaction events for Hover
+    map.on('mousemove', MAP_LAYERS.NEIGHBORHOODS_FILL, (e) => {
+        if (e.features.length > 0) {
+            if (window.hoveredFeatureId !== null) {
+                map.setFeatureState({ source: 'neighborhoods', id: window.hoveredFeatureId }, { hover: false });
+            }
+            window.hoveredFeatureId = e.features[0].id;
+            map.setFeatureState({ source: 'neighborhoods', id: window.hoveredFeatureId }, { hover: true });
+        }
+    });
+
+    map.on('mouseleave', MAP_LAYERS.NEIGHBORHOODS_FILL, () => {
+        if (window.hoveredFeatureId !== null) {
+            map.setFeatureState({ source: 'neighborhoods', id: window.hoveredFeatureId }, { hover: false });
+        }
+        window.hoveredFeatureId = null;
+    });
+
+    map.addLayer({
+        id: MAP_LAYERS.NEIGHBORHOODS_LINE,
+        type: 'line',
+        source: 'neighborhoods',
+        paint: {
+            'line-color': '#ffffff',
+            'line-width': 0.5,
+            'line-opacity': 0.3
+        }
+    });
+
+    // 2. Commune Highlight
+    map.addLayer({
+        id: MAP_LAYERS.HIGHLIGHT_FILL,
+        type: 'fill',
+        source: 'commune-highlight',
+        paint: {
+            'fill-color': '#0d1c40',
+            'fill-opacity': 0.05
+        }
+    });
+
+    map.addLayer({
+        id: MAP_LAYERS.HIGHLIGHT_LINE,
+        type: 'line',
+        source: 'commune-highlight',
+        paint: {
+            'line-color': '#0d1c40',
+            'line-width': 2,
+            'line-dasharray': [2, 2]
+        }
+    });
+
+    // 3. POI Layers ...
+    map.addLayer({
+        id: 'proximity-layer',
+        type: 'fill',
+        source: 'proximity',
+        paint: {
+            'fill-color': '#3b82f6',
+            'fill-opacity': 0.05
+        }
+    });
+
+    map.addLayer({
+        id: 'proximity-line',
+        type: 'line',
+        source: 'proximity',
+        paint: {
+            'line-color': '#3b82f6',
+            'line-width': 1,
+            'line-dasharray': [2, 2]
+        }
+    });
+
+    // --- AURA / PERIMETER LAYERS ---
+    map.addLayer({
+        id: 'city-centers-aura',
+        type: 'fill',
+        source: 'city-centers-aura',
+        paint: {
+            'fill-color': ['get', 'color'],
+            'fill-opacity': 0.12
+        },
+        layout: { visibility: 'none' }
+    });
+
+    // --- WALKING PATHS ---
+    // 0. White outline for transit
+    map.addLayer({
+        id: 'walking-paths-outline',
+        type: 'line',
+        source: 'walking-paths',
+        filter: ['==', ['get', 'isTransit'], true],
+        layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+        },
+        paint: {
+            'line-color': '#ffffff',
+            'line-width': ['+', ['get', 'weight'], 3],
+            'line-opacity': ['*', ['get', 'opacity'], 0.85]
+        }
+    });
+
+    // 1. Solid lines (Transit)
+    map.addLayer({
+        id: 'walking-paths-solid',
+        type: 'line',
+        source: 'walking-paths',
+        filter: ['==', ['get', 'isTransit'], true],
+        layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+        },
+        paint: {
+            'line-color': ['get', 'color'],
+            'line-width': ['get', 'weight'],
+            'line-opacity': ['get', 'opacity']
+        }
+    });
+
+    // 2. Dashed lines (Walking)
+    map.addLayer({
+        id: 'walking-paths-dashed',
+        type: 'line',
+        source: 'walking-paths',
+        filter: ['==', ['get', 'isTransit'], false],
+        layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+        },
+        paint: {
+            'line-color': ['get', 'color'],
+            'line-width': ['get', 'weight'],
+            'line-dasharray': [2, 3],
+            'line-opacity': ['get', 'opacity']
+        }
+    });
+
+    map.addLayer({
+        id: 'walking-paths-badges',
+        type: 'symbol',
+        source: 'walking-paths-badges',
+        layout: {
+            'text-field': ['get', 'label'],
+            'text-size': 9,
+            'text-allow-overlap': true,
+            'text-ignore-placement': true
+        },
+        paint: {
+            'text-color': ['get', 'textColor'],
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 2,
+            'text-opacity': [
+                'step',
+                ['zoom'],
+                0,
+                11.5,
+                ['get', 'opacity']
+            ]
+        }
+    });
+
+
+
+
+
+
+    map.addLayer({
+        id: 'centroid-layer',
+        type: 'circle',
+        source: 'centroid',
+        paint: {
+            'circle-radius': 6,
+            'circle-color': '#ef4444',
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#fff'
+        }
+    });
+    // --- POI LAYERS (STATIONS, SCHOOLS, ETC) ---
+    // Layered design: Circle (Background) + Symbol (Icon)
+    
+    // 1. STATIONS
+    map.addLayer({
+        id: 'stations-bg',
+        type: 'circle',
+        source: 'stations',
+        paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 4, 14, 8],
+            'circle-color': '#3b82f6',
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#fff'
+        },
+        layout: { visibility: 'none' }
+    });
+    map.addLayer({
+        id: 'stations-icon',
+        type: 'symbol',
+        source: 'stations',
+        layout: {
+            'text-field': '🚉',
+            'text-size': ['interpolate', ['linear'], ['zoom'], 11, 6, 14, 10],
+            'text-allow-overlap': true,
+            'visibility': 'none'
+        },
+        paint: { 'text-color': '#fff' }
+    });
+
+    // 2. SCHOOLS
+    map.addLayer({
+        id: 'schools-bg',
+        type: 'circle',
+        source: 'schools',
+        paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 4, 14, 8],
+            'circle-color': '#f59e0b',
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#fff'
+        },
+        layout: { visibility: 'none' }
+    });
+    map.addLayer({
+        id: 'schools-icon',
+        type: 'symbol',
+        source: 'schools',
+        layout: {
+            'text-field': '🎓',
+            'text-size': ['interpolate', ['linear'], ['zoom'], 11, 6, 14, 10],
+            'text-allow-overlap': true,
+            'visibility': 'none'
+        }
+    });
+
+    // 3. TRANSACTIONS (Ventes passées)
+    map.addLayer({
+        id: 'transactions-bg',
+        type: 'circle',
+        source: 'transactions',
+        paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 5, 14, 10],
+            'circle-color': ['case', ['boolean', ['get', 'isMatch'], true], '#10b981', '#0f172a'],
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#fff'
+        },
+        layout: { visibility: 'none' }
+    });
+    map.addLayer({
+        id: 'transactions-icon',
+        type: 'symbol',
+        source: 'transactions',
+        layout: {
+            'text-field': ['case', ['==', ['get', 'type'], 'Maison'], '🏠', '🏢'],
+            'text-size': ['interpolate', ['linear'], ['zoom'], 11, 6, 14, 10],
+            'text-allow-overlap': true,
+            'visibility': 'none'
+        }
+    });
+
+    // 4. CITY CENTERS (Pôles d'attractivité)
+    map.addLayer({
+        id: 'city-centers-bg',
+        type: 'circle',
+        source: 'city-centers',
+        paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 8, 14, 14],
+            'circle-color': '#fff',
+            'circle-stroke-width': 2,
+            'circle-stroke-color': ['get', 'color']
+        }
+    });
+    map.addLayer({
+        id: 'city-centers-icon',
+        type: 'symbol',
+        source: 'city-centers',
+        layout: {
+            'text-field': ['get', 'icon'],
+            'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 14, 16],
+            'text-allow-overlap': true
+        }
+    });
+
+    // 4. Paths (Walking/Transit)
+    map.addLayer({
+        id: MAP_LAYERS.PATHS,
+        type: 'line',
+        source: 'paths',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+            'line-color': ['get', 'color'],
+            'line-width': 4,
+            'line-opacity': 0.8
+        }
+    });
+
+    // Interaction events
+    map.on('mouseenter', MAP_LAYERS.NEIGHBORHOODS_FILL, () => {
+        map.getCanvas().style.cursor = 'pointer';
+    });
+    map.on('mouseleave', MAP_LAYERS.NEIGHBORHOODS_FILL, () => {
+        map.getCanvas().style.cursor = '';
+    });
+    map.on('click', MAP_LAYERS.NEIGHBORHOODS_FILL, (e) => {
+        if (e.features.length > 0) {
+            selectFeature(e);
+        }
+    });
+
+    initApp();
+});
+
+// Compatibility Shims
+window.communeHighlightLayer = { 
+    clearLayers: () => {
+        const source = map.getSource('commune-highlight');
+        if (source) source.setData({ type: 'FeatureCollection', features: [] });
+    }
+};
+window.walkingPathsGroup = { 
+    clearLayers: () => {
+        const source = map.getSource('walking-paths');
+        if (source) source.setData({ type: 'FeatureCollection', features: [] });
+        const bsource = map.getSource('walking-paths-badges');
+        if (bsource) bsource.setData({ type: 'FeatureCollection', features: [] });
+        
+        if (window.activeWalkingPaths) {
+            window.activeWalkingPaths.forEach(p => {
+                if (p.markers) p.markers.forEach(m => m.remove());
+            });
+            window.activeWalkingPaths = [];
+        }
+    }
+};
+
+// window.renderActiveLayers = () => { console.log("renderActiveLayers - migration in progress"); };
 
 window.visibleInseeCache = [];
 function updateVisibleInseeCache() {
-    if (!window.map || !window.geojsonLayer) return;
+    if (!window.map || !window.irisGrid) return;
     const bounds = window.map.getBounds();
-    const visible = [];
-    window.geojsonLayer.eachLayer(layer => {
-        if (bounds.intersects(layer.getBounds())) {
-            visible.push(layer.feature.properties.code || layer.feature.id);
+    const visible = new Set();
+
+    // Use the spatial grid for ultra-fast visibility detection (O(1) vs O(N))
+    const nw = bounds.getNorthWest();
+    const se = bounds.getSouthEast();
+    
+    const minX = Math.floor(nw.lng * 50) - 1;
+    const maxX = Math.floor(se.lng * 50) + 1;
+    const minY = Math.floor(se.lat * 50) - 1;
+    const maxY = Math.floor(nw.lat * 50) + 1;
+
+    for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+            const cell = window.irisGrid[`${x},${y}`];
+            if (cell) cell.forEach(code => visible.add(code));
         }
-    });
-    window.visibleInseeCache = visible;
-    console.log("📍 Updated visible IRIS cache:", visible.length);
+    }
+
+    window.visibleInseeCache = Array.from(visible);
+    console.log("📍 Updated visible IRIS cache:", window.visibleInseeCache.length);
 }
 
 const debouncedRender = (function(func, wait) {
@@ -1653,27 +1565,9 @@ map.on('zoomend', debouncedRender);
 // Initial update
 setTimeout(updateVisibleInseeCache, 1000);
 
-const lightLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: 'abcd',
-    maxZoom: 20
-}).addTo(map);
-
-const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community',
-    maxZoom: 19
-});
-
 window.toggleSatelliteView = function (isSatellite) {
-    if (isSatellite) {
-        map.removeLayer(lightLayer);
-        map.addLayer(satelliteLayer);
-        satelliteLayer.bringToBack();
-    } else {
-        map.removeLayer(satelliteLayer);
-        map.addLayer(lightLayer);
-        lightLayer.bringToBack();
-    }
+    console.log("Toggle satellite view (migration in progress)");
+    // MapLibre logic for switching between raster and satellite sources would go here
 };
 
 // --- INFO BOX (Stand-alone div for robust event handling) ---
@@ -1726,197 +1620,174 @@ info.update = function (props, isSticky = false) {
     if (!infoDiv) return;
 
     try {
-        // If a selection is active, we only accept 'sticky' updates (like accordion clicks)
-        if (selectedLayer && !isSticky) return;
-
+        if (window.selectedLayer && !isSticky) return;
         if (!props || !props.nom) {
-            if (selectedLayer) return;
+            if (window.selectedLayer) return;
             window.setSidebarView('none');
-            infoDiv.classList.remove('sticky-box');
+            if (infoDiv) {
+                infoDiv.classList.remove('sticky-box');
+                infoDiv.innerHTML = '';
+            }
             return;
         }
 
-        // Contextual Switch: Use unified function
         window.setSidebarView('info');
-
         if (isSticky) {
             infoDiv.classList.add('sticky-box');
         } else {
             infoDiv.classList.remove('sticky-box');
         }
 
-        const matchData = calculateMatchRate(props);
+        const matchData = calculateMatchRate(props, true);
         const matchRate = matchData?.total || 0;
-        // Define section icons (SVGs with yellow shadows as per user design)
+        
         const SECTION_ICONS = {
-            search: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7" fill="#fef08a" transform="translate(1, 1)"/><circle cx="12" cy="12" r="7" stroke="#0d1c40" stroke-width="2" fill="white"/><circle cx="12" cy="12" r="2" fill="#0d1c40"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
-            compass: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" fill="#fef08a" transform="translate(1, 1)"/><circle cx="12" cy="12" r="8" stroke="#0d1c40" stroke-width="2" fill="white"/><path d="M15.5 8.5L10 10l-1.5 5.5L14 14l1.5-5.5z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`,
-            about: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none"><path d="M4 21h16M6 21V9m12 12V9M10 21V9m4 12V9M3 9l9-5 9 5" fill="#fef08a" transform="translate(1, 1)"/><path d="M4 21h16M6 21V9m12 12V9M10 21V9m4 12V9M3 9l9-5 9 5" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`
+            search: `<svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>`,
+            compass: `<svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><path d="M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"></path></svg>`,
+            about: `<svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>`
         };
 
         const CAT_ICONS = {
-            immo: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><path d="M4 10l8-7 8 7v10a1 1 0 01-1 1H5a1 1 0 01-1-1V10z" fill="#fef08a" transform="translate(2, 2)"/><path d="M4 10l8-7 8 7v10a1 1 0 01-1 1H5a1 1 0 01-1-1V10z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M9 21V12h6v9" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`,
-            commute: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#fef08a" transform="translate(2, 2)"/><circle cx="12" cy="12" r="9" stroke="#0d1c40" stroke-width="2" fill="white"/><path d="M12 7v5l3 3" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
-            mobility: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><path d="M13 3L4 14h7l-2 7 9-11h-7l2-7z" fill="#fef08a" transform="translate(2, 2)"/><path d="M13 3L4 14h7l-2 7 9-11h-7l2-7z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`,
-            urbanisme: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="16" fill="#fef08a" transform="translate(2, 2)"/><rect x="5" y="4" width="14" height="16" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M9 8h2m2 0h2M9 12h2m2 0h2M9 16h2m2 0h2" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
-            socio: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><path d="M17 8C17 5.23858 14.7614 3 12 3C9.23858 3 7 5.23858 7 8C4.79086 8 3 9.79086 3 12C3 14.2091 4.79086 16 7 16H17C19.2091 16 21 14.2091 21 12C21 9.79086 19.2091 8 17 8Z" fill="#fef08a" transform="translate(2, 2)"/><path d="M17 8C17 5.23858 14.7614 3 12 3C9.23858 3 7 5.23858 7 8C4.79086 8 3 9.79086 3 12C3 14.2091 4.79086 16 7 16H17C19.2091 16 21 14.2091 21 12C21 9.79086 19.2091 8 17 8Z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M8 12c1.5 1 3.5 1 5 0m-4-4c1.5-1 3.5-1 5 0" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
-            safety: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#fef08a" transform="translate(2, 2)"/><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M12 2v20" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
-            education: `<svg class="w-8 h-8" viewBox="0 0 24 24" fill="none"><path d="M12 14l9-5-9-5-9 5 9 5z" fill="#fef08a" transform="translate(2, 2)"/><path d="M12 14l9-5-9-5-9 5 9 5z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M6 10.6V16c0 1.5 2.5 3 6 3s6-1.5 6-3v-5.4" stroke="#0d1c40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+            immo: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>`,
+            commute: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+            mobility: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>`,
+            urbanisme: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>`,
+            vieQuartier: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9v12h14V9"></path><path d="M7 21v-7h4v7"></path><rect x="13" y="14" width="4" height="4"></rect><path d="M3 9l2-5h14l2 5Z" fill="currentColor"></path><path d="M8 2h8"></path></svg>`,
+            socio: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8" cy="12" r="3"></circle><line x1="14" y1="10" x2="19" y2="10"></line><line x1="14" y1="14" x2="19" y2="14"></line></svg>`,
+            demo: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line><line x1="2" y1="20" x2="22" y2="20"></line></svg>`,
+            safety: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>`,
+            education: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10l-10-5-10 5 10 5 10-5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path><line x1="22" y1="10" x2="22" y2="19"></line></svg>`,
+            infra: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14V6h4v4h4V4h6v10"></path><path d="M6 9h.01M16 7h.01M16 10h.01" stroke-width="3"></path><path d="M1 16c6-3 14-3 22 2"></path></svg>`,
+            finances: `<svg class="w-5 h-5 text-[#1e1b4b]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="21" width="16" height="2"></rect><polygon points="12 2 20 7 4 7"></polygon><line x1="16" y1="21" x2="16" y2="9"></line><line x1="8" y1="21" x2="8" y2="9"></line><line x1="12" y1="21" x2="12" y2="9"></line></svg>`
         };
 
         const html = `
-        <div class="flex flex-col h-full bg-white rounded-3xl overflow-hidden shadow-xl">
+        <div class="absolute left-6 top-6 bottom-6 w-[440px] bg-slate-50/95 backdrop-blur-md rounded-3xl shadow-[0_20px_60px_-15px_rgba(30,27,75,0.3)] flex flex-col border-2 border-[#1e1b4b] overflow-hidden z-20">
+            
             <!-- Header Section -->
-            <div class="p-6 pb-4 border-b border-slate-100">
-                <div class="flex items-start justify-between">
-                    <div class="flex flex-col min-w-0">
-                        <h2 class="text-3xl font-black text-[#0d1c40] tracking-tight leading-none">
-                            ${props.commune || ''} <br>
-                            <span class="text-xl text-slate-400 font-bold">${cleanName(props.nom)}</span>
-                        </h2>
+            <div class="px-6 py-6 shrink-0 bg-white border-b-2 border-[#1e1b4b] z-10">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="min-w-0 pr-4">
+                        <h2 class="text-2xl font-black text-[#1e1b4b] tracking-tighter leading-tight mb-0.5 truncate">${cleanName(props.nom)}</h2>
+                        <p class="text-sm font-bold text-slate-400">${props.commune || ''}</p>
                     </div>
-                    <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-3 shrink-0">
                         <span class="text-4xl font-black ${matchData.excluded ? 'text-slate-200' : 'text-emerald-500'} tracking-tighter">${matchRate}%</span>
-                        <button onclick="deselectFeature()" class="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors border border-slate-200 shadow-sm">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        <button onclick="deselectFeature()" class="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors border-2 border-[#1e1b4b] shadow-[2px_2px_0px_#1e1b4b]">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg>
                         </button>
                     </div>
                 </div>
                 
-                <!-- Tags - New Style -->
-                <div class="flex flex-wrap gap-2 mt-5">
-                    ${getQuartierBadges(props).map(b => {
-                        const classes = b.color.split(' ');
-                        const bgClass = classes.find(c => c.startsWith('bg-')) || 'bg-slate-50';
-                        const match = bgClass.match(/bg-(.+)-\d+/);
-                        const colorName = match ? match[1] : 'slate';
-                        
-                        // Map specific colors to their text shades for premium look
-                        const textShade = (colorName === 'amber' || colorName === 'orange' || colorName === 'yellow') ? '700' : '600';
-                        const styleClasses = `bg-${colorName}-50 text-${colorName}-${textShade} border-${colorName}-100/50`;
-                        
-                        return `<span class="px-2.5 py-1 ${styleClasses} rounded-md text-[10px] font-bold border">${b.text}</span>`;
-                    }).join('')}
+                <!-- Tags -->
+                <div class="flex flex-wrap gap-2">
+                    ${(() => {
+                        try {
+                            return getQuartierBadges(props);
+                        } catch (e) { return []; }
+                    })().map(b => `
+                        <div class="relative shadow-offset-purple">
+                            <div class="relative bg-white border-2 border-[#1e1b4b] text-[#1e1b4b] text-[10px] font-black px-2.5 py-1 rounded-md uppercase tracking-wider whitespace-nowrap">${b.text}</div>
+                        </div>
+                    `).join('')}
                 </div>
             </div>
 
             <!-- Scrollable Content -->
-            <div class="flex-1 overflow-y-auto scrollbar-hide">
+            <div class="flex-1 overflow-y-auto no-scrollbar p-6 space-y-5">
                 ${(() => {
                     const sectionMapping = [
-                        {
-                            title: "PÉRIMÈTRE DE RECHERCHE",
-                            icon: SECTION_ICONS.search,
-                            ids: ["immo", "commute"]
-                        },
-                        {
-                            title: "COMPRENDRE LE QUARTIER",
-                            icon: SECTION_ICONS.compass,
-                            ids: ["mobility", "urbanisme", "vieQuartier", "socio"]
-                        },
-                        {
-                            title: `À PROPOS DE ${props.commune?.toUpperCase() || 'LA VILLE'}`,
-                            icon: SECTION_ICONS.about,
-                            ids: ["safety", "education", "infra", "finances"]
-                        }
+                        { title: "Périmètre de recherche", icon: SECTION_ICONS.search, ids: ["immo", "commute"] },
+                        { title: "Comprendre le quartier", icon: SECTION_ICONS.compass, ids: ["mobility", "urbanisme", "vieQuartier", "socio", "demo"] },
+                        { title: `À propos de ${props.commune || 'la ville'}`, icon: SECTION_ICONS.about, ids: ["safety", "education", "infra", "finances"] }
                     ];
 
                     return sectionMapping.map(section => `
-                        <div class="bg-slate-50/80 px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b border-slate-100">
+                        <div class="flex items-center gap-2 mb-2 mt-4 first:mt-0">
                             ${section.icon}
-                            ${section.title}
+                            <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">${section.title}</span>
                         </div>
                         
+                        <div class="space-y-4">
                         ${section.ids.map(id => {
                             const cat = matchData.categories[id];
                             if (!cat || !cat.label || cat.isHidden) return '';
                             const isOpen = window.activeAccordion === id;
                             
-                            // Determine indicator style (badge or dots)
-                            let indicatorHtml = '';
-                            let prefColor = "text-slate-400";
-                            
-                            // Color logic
-                            if (id === 'immo') {
-                                prefColor = cat.score > 70 ? "text-emerald-500" : (cat.score > 40 ? "text-amber-500" : "text-red-500");
-                            } else if (id === 'mobility' || id === 'commute') {
-                                const mColors = {
-                                    "Loin des gares": "text-red-500", "Connecté": "text-orange-400",
-                                    "Sur le métro": "text-emerald-500", "Hub hyper-centre": "text-emerald-600",
-                                    "Pénible": "text-red-500", "Moyen": "text-orange-400",
-                                    "Confortable": "text-emerald-500", "Idéal": "text-emerald-600"
-                                };
-                                prefColor = mColors[cat.appreciation] || "text-slate-400";
-                            } else {
-                                prefColor = cat.score > 80 ? "text-emerald-500" : (cat.score > 50 ? "text-amber-500" : "text-slate-400");
-                            }
-
-                            if (cat.isCustomScale || id === 'immo') {
-                                const badgeColor = prefColor.includes('emerald') ? 'bg-emerald-50 text-emerald-600 border-emerald-100/50' : 
-                                                 (prefColor.includes('amber') || prefColor.includes('orange') ? 'bg-amber-50 text-amber-700 border-amber-100/50' : 'bg-red-50 text-red-600 border-red-100/50');
-                                indicatorHtml = `<span class="px-2 py-0.5 ${badgeColor} text-[10px] font-black rounded border uppercase tracking-wide">${cat.score}% match</span>`;
-                            } else {
-                                // Dots indicator
-                                indicatorHtml = `
-                                    <div class="flex gap-1.5 bg-slate-50 border border-slate-100 px-2 py-1.5 rounded-full">
-                                        ${cat.scale.map((_, idx) => {
-                                            const isActive = idx === cat.scaleIndex;
-                                            const dotColor = isActive ? prefColor.replace('text-', 'bg-') : 'bg-slate-200';
-                                            const shadow = isActive ? `shadow-[0_0_4px_${prefColor.replace('text-', 'rgba(').replace('500', '0.5)')}]` : '';
-                                            return `<div class="w-1.5 h-1.5 rounded-full ${dotColor} ${shadow}"></div>`;
-                                        }).join('')}
-                                    </div>
-                                `;
-                            }
+                            // Appreciation color
+                            const appreciationColors = {
+                                "Idéal": "bg-emerald-100", "Confortable": "bg-[#dcfce7]",
+                                "Moyen": "bg-[#fef08a]", "Pénible": "bg-[#fee2e2]",
+                                "Sous-invest.": "bg-[#fce7f3]", "Excellent": "bg-[#dcfce7]",
+                                "Bon": "bg-[#f0fdf4]", "Mixité sociale": "bg-[#dcfce7]",
+                                "Loin des gares": "bg-[#fee2e2]", "Connecté": "bg-[#fef9c3]",
+                                "Sur le métro": "bg-[#dcfce7]"
+                            };
+                            const badgeColor = appreciationColors[cat.appreciation] || "bg-slate-100";
 
                             return `
-                                <div class="sources-container relative border-b border-slate-50">
-                                    <button onclick="window.toggleAccordion('${id}')" class="w-full flex items-center justify-between p-4 px-6 hover:bg-slate-50 transition-colors group">
-                                        <div class="flex items-center gap-4">
-                                            <div class="w-8 h-8 shrink-0 flex items-center justify-center">
-                                                ${CAT_ICONS[id] || `<div class="text-xl">${cat.icon}</div>`}
+                                <div class="relative group cursor-pointer">
+                                    <div class="absolute inset-0 bg-[#c4b5fd] rounded-xl translate-x-[4px] translate-y-[4px] transition-transform group-hover:translate-x-[6px] group-hover:translate-y-[6px]"></div>
+                                    <div class="relative bg-white border-2 border-[#1e1b4b] rounded-xl flex flex-col overflow-hidden transition-transform group-hover:-translate-y-0.5 group-hover:-translate-x-0.5 ${isOpen ? 'ring-2 ring-indigo-200' : ''}">
+                                        
+                                        <!-- Header Accordion -->
+                                        <div onclick="window.toggleAccordion('${id}')" class="p-4 flex items-center justify-between ${isOpen && id === 'commute' ? 'bg-[#1e1b4b]' : ''}">
+                                            <div class="flex items-center gap-4">
+                                                <div class="relative w-10 h-10 shrink-0">
+                                                    <div class="absolute inset-0 ${isOpen && id === 'commute' ? 'bg-white' : 'bg-[#c4b5fd]'} rounded-[10px] translate-x-[2px] translate-y-[2px]"></div>
+                                                    <div class="absolute inset-0 ${isOpen && id === 'commute' ? 'bg-[#c4b5fd]' : 'bg-white'} border-2 border-[#1e1b4b] rounded-[10px] flex items-center justify-center">
+                                                        ${CAT_ICONS[id] || cat.icon}
+                                                    </div>
+                                                </div>
+                                                <h3 class="font-black ${isOpen && id === 'commute' ? 'text-white' : 'text-[#1e1b4b]'} text-[15px]">${cat.label}</h3>
                                             </div>
-                                            <div class="text-left">
-                                                <h3 class="font-extrabold text-[#0d1c40] text-sm">${cat.label}</h3>
-                                                <p class="${prefColor} text-xs font-bold mt-0.5">${cat.appreciation}</p>
+                                            <div class="flex items-center gap-3">
+                                                <div class="relative">
+                                                    <div class="absolute inset-0 ${isOpen && id === 'commute' ? 'bg-white' : 'bg-[#c4b5fd]'} rounded-md translate-x-[2px] translate-y-[2px]"></div>
+                                                    <div class="relative text-[10px] font-black text-[#1e1b4b] ${badgeColor} border-2 border-[#1e1b4b] px-2 py-1 rounded-md uppercase tracking-wider">${cat.appreciation}</div>
+                                                </div>
+                                                <svg class="w-5 h-5 ${isOpen && id === 'commute' ? 'text-white/50' : 'text-slate-300'} transform transition-transform ${isOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path></svg>
                                             </div>
                                         </div>
-                                        <div class="flex items-center gap-3">
-                                            ${indicatorHtml}
-                                            <svg class="w-4 h-4 text-slate-300 transform transition-transform ${isOpen ? 'rotate-180 text-blue-500' : 'group-hover:text-slate-600'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                        </div>
-                                    </button>
 
-                                    ${isOpen ? `
-                                    <div class="px-6 pb-6 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <div class="mb-4">
-                                            <button onclick="window.toggleSources('${id}', event)" class="sources-trigger flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-100 bg-blue-50/50 text-[10px] font-bold text-blue-600 hover:bg-blue-100 transition-all shadow-sm">
-                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                                Sources de données
-                                            </button>
-                                            <div id="sources-dropdown-${id}" class="sources-dropdown hidden absolute top-12 left-6 right-6 z-30 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-100 p-5 animate-in fade-in zoom-in duration-200">
-                                                <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Sources détaillées</div>
-                                                <div class="space-y-4">
-                                                    ${(CATEGORY_SOURCES[id] || []).map(s => `
-                                                        <div class="flex gap-4">
-                                                            <div class="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-lg shrink-0 shadow-inner">${s.icon}</div>
-                                                            <div class="flex flex-col">
-                                                                <div class="flex items-center gap-2">
-                                                                    <span class="text-[11px] font-black text-slate-800">${s.title}</span>
-                                                                    <span class="text-[10px] text-slate-400 font-bold">(${s.year})</span>
+                                        <!-- Content Accordion -->
+                                        ${isOpen ? `
+                                        <div class="p-5 bg-dot-grid border-t-2 border-[#1e1b4b] animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <!-- Sources -->
+                                            <div class="relative inline-block mb-5">
+                                                <div class="absolute inset-0 bg-[#c4b5fd] rounded-lg translate-x-[3px] translate-y-[3px]"></div>
+                                                <button onclick="window.toggleSources('${id}', event)" class="relative bg-white border-2 border-[#1e1b4b] text-[#1e1b4b] px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:-translate-y-0.5 transition-transform">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                                                    Sources de données
+                                                </button>
+                                                <div id="sources-dropdown-${id}" class="sources-dropdown hidden absolute top-12 left-0 right-[-100px] z-30 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border-2 border-[#1e1b4b] p-5 animate-in fade-in zoom-in duration-200">
+                                                    <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Sources détaillées</div>
+                                                    <div class="space-y-4">
+                                                        ${(CATEGORY_SOURCES[id] || []).map(s => `
+                                                            <div class="flex gap-4">
+                                                                <div class="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-lg shrink-0 shadow-inner">${s.icon}</div>
+                                                                <div class="flex flex-col">
+                                                                    <div class="flex items-center gap-2">
+                                                                        <span class="text-[11px] font-black text-slate-800">${s.title}</span>
+                                                                        <span class="text-[10px] text-slate-400 font-bold">(${s.year})</span>
+                                                                    </div>
+                                                                    <span class="text-[10px] text-slate-500 leading-tight mt-1">${s.desc}</span>
                                                                 </div>
-                                                                <span class="text-[10px] text-slate-500 leading-tight mt-1">${s.desc}</span>
                                                             </div>
-                                                        </div>
-                                                    `).join('')}
+                                                        `).join('')}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div class="text-xs text-slate-600 leading-relaxed">${renderCategoryDetails(id, props, cat, matchData)}</div>
-                                    </div>` : ''}
+
+                                            <div class="relative">
+                                                ${renderCategoryDetails(id, props, cat, matchData)}
+                                            </div>
+                                        </div>` : ''}
+                                    </div>
                                 </div>
                             `;
                         }).join('')}
+                        </div>
                     `).join('');
                 })()}
             </div>
@@ -1926,9 +1797,14 @@ info.update = function (props, isSticky = false) {
     } catch (err) {
         console.error("Error updating info box:", err);
         infoDiv.innerHTML = `
-            <div class="p-6 text-center">
-                <div class="text-red-500 mb-2">⚠️ Erreur d'affichage</div>
-                <div class="text-[10px] text-gray-500">Impossible de charger les détails de ce quartier.</div>
+            <div class="p-8 text-center flex flex-col items-center justify-center h-full">
+                <div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4 border-2 border-red-100 shadow-sm">
+                    <span class="text-3xl">⚠️</span>
+                </div>
+                <h3 class="text-lg font-black text-red-800 mb-2">Erreur d'affichage</h3>
+                <p class="text-xs text-red-600/70 max-w-[200px] leading-relaxed">
+                    Impossible de charger les détails de ce quartier.
+                </p>
             </div>
         `;
         infoDiv.classList.add('visible');
@@ -2010,21 +1886,23 @@ window.highlightPathByName = function (name) {
     });
 };
 
-window.updateContextualMap = function (categoryId) {
+window.updateContextualMap = function (categoryId, noZoom = false) {
     // 1. Gérer la visibilité des groupes de pills à droite
-    const allPillGroups = ['pill-group-mobility', 'pill-group-commerces', 'pill-group-sante', 'pill-group-sorties', 'pill-group-infra', 'pill-group-maps', 'pill-group-immo'];
+    const allPillGroups = ['pill-group-mobility', 'pill-group-commerces', 'pill-group-sante', 'pill-group-sorties', 'pill-group-infra', 'pill-group-maps', 'pill-group-immo', 'pill-group-demo', 'pill-group-commute'];
     const pillMappings = {
         'immo': ['pill-group-immo'],
         'mobility': ['pill-group-mobility'],
-        'commute': ['pill-group-mobility'],
+        'commute': ['pill-group-commute'],
         'urbanisme': ['pill-group-maps'],
         'vieQuartier': ['pill-group-commerces', 'pill-group-sorties', 'pill-group-sante'],
         'infra': ['pill-group-infra'],
         'education': ['pill-group-infra'],
         'safety': ['pill-group-maps'],
         'socio': ['pill-group-maps'],
+        'demo': ['pill-group-demo'],
         'finances': ['pill-group-immo']
     };
+
 
     if (categoryId) {
         const allowedPills = pillMappings[categoryId] || [];
@@ -2052,13 +1930,15 @@ window.updateContextualMap = function (categoryId) {
     const mappings = {
         'immo': { 'show-transactions': true },
         'mobility': { 'show-stations': true },
-        'commute': {},
+        'commute': { 'group-commute': true },
         'urbanisme': {},
         'vieQuartier': { 'show-centre-ville': true },
         'infra': { 'group-infra': true },
         'education': { 'show-schools': true },
-        'safety': { 'show-qpv': true, 'show-zsp': true }
+        'safety': { 'show-qpv': true, 'show-zsp': true },
+        'demo': { 'group-demo': true }
     };
+
 
     const config = mappings[categoryId];
     if (config) {
@@ -2106,8 +1986,8 @@ window.updateContextualMap = function (categoryId) {
         if (window.updatePathsVisibility) window.updatePathsVisibility();
     }
 
-    // Stop any ongoing movement to prevent race conditions
-    map.stop();
+    // Map movement is handled at a higher level (selectFeature/selectCity)
+    // Removed map.stop() to allow smooth transitions
 
     // D. Toujours mettre à jour les trajets selon la catégorie active
     const visibleType = window.getVisiblePathType(categoryId);
@@ -2116,40 +1996,42 @@ window.updateContextualMap = function (categoryId) {
     }
 
     // Small delay to ensure layout has settled (sidebar width etc.)
-    setTimeout(() => {
-        // JOURNEY ZOOM: Show the whole path when commute is selected
-        if (categoryId === 'commute' && window.selectedLayer) {
-            const irisBounds = window.selectedLayer.getBounds();
-            const commuteCriteria = (window.searchCriteria || []).find(c => c.property === 'commute');
-            const hubId = commuteCriteria?.workplace || (window.activeWorkplaces?.[0]?.id) || 'bastille';
-            const hub = window.HUBS_COORDS?.[hubId];
-            if (hub) {
-                const hubLatLng = L.latLng(hub.lat, hub.lon);
-                const journeyBounds = L.latLngBounds(irisBounds.getSouthWest(), irisBounds.getNorthEast());
-                journeyBounds.extend(hubLatLng);
-                map.flyToBounds(journeyBounds, {
-                    paddingTopLeft: [420, 100], // Sidebar offset
-                    paddingBottomRight: [100, 100],
-                    maxZoom: 13,
-                    duration: 0.8
+    if (!noZoom) {
+        setTimeout(() => {
+            if (categoryId === 'commute' && window.selectedLayer) {
+                const feat = window.selectedLayer.feature;
+                const irisBounds = turf.bbox(feat);
+                
+                const commuteCriteria = (window.searchCriteria || []).find(c => c.property === 'commute');
+                const hubId = commuteCriteria?.workplace || (window.activeWorkplaces?.[0]?.id) || 'bastille';
+                const hub = (window.HUBS_COORDS || {})[hubId];
+                
+                if (hub) {
+                    const bounds = [
+                        [Math.min(irisBounds[0], hub.lon), Math.min(irisBounds[1], hub.lat)],
+                        [Math.max(irisBounds[2], hub.lon), Math.max(irisBounds[3], hub.lat)]
+                    ];
+                    
+                    window.map.fitBounds(bounds, {
+                        padding: { top: 100, bottom: 100, left: 420, right: 100 },
+                        maxZoom: 13,
+                        duration: 800
+                    });
+                }
+            } else if (window.selectedLayer) {
+                const feat = window.selectedLayer.feature;
+                const bbox = turf.bbox(feat);
+                window.map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], {
+                    padding: { top: 50, bottom: 50, left: 360, right: 50 },
+                    maxZoom: 15,
+                    duration: 800
                 });
-                map.setMinZoom(11); // Allow more de-zoom for journey
+            } else if (window.activeCommuneName) {
+                if (window.selectCity) window.selectCity(window.activeCommuneName);
             }
-        } else if (window.selectedLayer && typeof window.selectedLayer.getBounds === 'function') {
-            // Focus back on the specific neighborhood IRIS
-            map.flyToBounds(window.selectedLayer.getBounds(), {
-                paddingTopLeft: [360, 50],
-                paddingBottomRight: [50, 50],
-                maxZoom: 15,
-                duration: 0.8
-            });
-            map.setMinZoom(13.5);
-        } else if (window.activeCommuneName) {
-            // If no neighborhood selected but a city is active, return to city extent
-            console.log("[RE-ZOOM] Focusing back on city:", window.activeCommuneName);
-            if (window.selectCity) window.selectCity(window.activeCommuneName);
-        }
-    }, 50);
+        }, 50);
+    }
+
 };
 
 window.toggleAccordion = function (id) {
@@ -2178,131 +2060,143 @@ window.toggleAccordion = function (id) {
     }
 };
 
+function renderImmoHTML(props, segment, budget, matchData) {
+    const liquidity = Math.min(100, (segment?.vol || 0) * 15);
+    return `
+        <div class="px-4 pb-4 space-y-4">
+            <div class="pt-2 border-t border-gray-100">
+            ${matchData.details.immo.availability === 0 ? `
+            <div class="bg-red-50 p-2 rounded-lg border border-red-100 flex items-center gap-2 mb-3">
+                <span class="text-sm">⚠️</span>
+                <div class="flex flex-col">
+                    <span class="text-[9px] font-black text-red-800 uppercase">Indisponible</span>
+                    <span class="text-[8px] text-red-600">Aucun bien de type "${(window.currentPropertyType || 'all') === 'house' ? 'Maison' : 'Appartement'}" dans ce quartier.</span>
+                </div>
+            </div>
+            ` : ''}
+
+            <div class="bg-white/40 p-3 rounded-xl border border-gray-100 shadow-sm">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-[10px] text-gray-500 uppercase font-black">Prix Marché</span>
+                    <span class="text-[14px] font-black text-gray-900">${new Intl.NumberFormat('fr-FR').format(segment?.price || 0)} €/m2</span>
+                </div>
+                ${window.renderHistoricalTrend(props.evolution_house, props.evolution_apt)}
+            </div>
+
+            <!-- Core Metrics Unified -->
+            <div class="mt-4 space-y-3">
+                <!-- Match Budget -->
+                <div class="bg-white p-3.5 rounded-xl border border-gray-100 shadow-sm transition-all duration-500">
+                    <div class="flex justify-between items-end mb-2">
+                        <div class="flex flex-col">
+                            <span class="text-[9px] font-black uppercase text-gray-500 tracking-widest">Match Budget</span>
+                            <span class="text-[8px] text-gray-400 font-medium">Taille idéale visée : ${Math.round(budget / (segment?.price || 1))} m2</span>
+                        </div>
+                        <span class="text-[14px] font-black text-gray-800">${matchData.details.immo.fitScore}%</span>
+                    </div>
+                    <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                        <div class="h-full transition-all duration-700" style="width: ${matchData.details.immo.fitScore}%; background: ${matchData.details.immo.fitScore >= 80 ? 'linear-gradient(90deg, #4ade80 0%, #22c55e 100%)' : (matchData.details.immo.fitScore >= 50 ? 'linear-gradient(90deg, #fcd34d 0%, #f59e0b 100%)' : 'linear-gradient(90deg, #fca5a5 0%, #ef4444 100%)')};"></div>
+                    </div>
+                </div>
+
+                <!-- Type de bien recherché -->
+                <div class="bg-white p-3.5 rounded-xl border border-gray-100 shadow-sm transition-all duration-500">
+                    <div class="flex justify-between items-end mb-2">
+                        <div class="flex flex-col">
+                            <span class="text-[9px] font-black uppercase text-gray-500 tracking-widest">Bien Ciblé</span>
+                            <span class="text-[8px] text-gray-400 font-medium">${window.currentPropertyType === 'house' ? 'Maisons' : (window.currentPropertyType === 'apt' ? 'Appartements' : 'Logements')} ≥ ${document.getElementById('surface-input')?.value || '?'}</span>
+                        </div>
+                        <span class="text-[14px] font-black text-gray-800">${matchData.details.immo.finalAvailabilityPct}%</span>
+                    </div>
+                    <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                        <div class="h-full transition-all duration-700" style="width: ${matchData.details.immo.finalAvailabilityPct}%; background: ${matchData.details.immo.finalAvailabilityPct >= 15 ? 'linear-gradient(90deg, #60a5fa 0%, #3b82f6 100%)' : (matchData.details.immo.finalAvailabilityPct >= 7 ? 'linear-gradient(90deg, #fcd34d 0%, #f59e0b 100%)' : 'linear-gradient(90deg, #fca5a5 0%, #ef4444 100%)')};"></div>
+                    </div>
+                </div>
+
+                <!-- Liquidité -->
+                <div class="bg-white p-3.5 rounded-xl border border-gray-100 shadow-sm transition-all duration-500">
+                    <div class="flex justify-between items-end mb-2">
+                        <div class="flex flex-col">
+                            <span class="text-[9px] font-black uppercase text-gray-500 tracking-widest">Liquidité Marché</span>
+                            <span class="text-[8px] text-gray-400 font-medium">${segment?.vol || 0} transactions / an</span>
+                        </div>
+                        <span class="text-[14px] font-black text-gray-800">${liquidity}%</span>
+                    </div>
+                    <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                        <div class="h-full transition-all duration-700" style="width: ${liquidity}%; background: linear-gradient(90deg, #a78bfa 0%, #8b5cf6 100%);"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Surface Distribution -->
+            ${props.demo?.surface_dist ? `
+            <div class="mt-6 pt-4 border-t border-gray-100">
+                <div class="flex justify-between items-end mb-3">
+                    <div class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Répartition des surfaces (existantes)</div>
+                </div>
+                <div class="space-y-2.5">
+                    ${Object.entries(props.demo.surface_dist).map(([label, pct]) => {
+                        const bValues = { "<30m2": 20, "30-40m2": 35, "40-60m2": 50, "60-80m2": 70, "80-100m2": 90, "100-120m2": 110, "120m2+": 140 };
+                        const avgSize = bValues[label] || 50;
+                        const est = budget / (segment?.price || 1);
+                        const ratio = est / avgSize;
+                        let barGradient = 'linear-gradient(90deg, #fcd34d 0%, #f59e0b 100%)';
+                        let statusText = 'Trop petit';
+                        let statusColor = 'text-amber-500';
+                        if (ratio >= 0.95 && ratio <= 1.25) {
+                            barGradient = 'linear-gradient(90deg, #4ade80 0%, #22c55e 100%)';
+                            statusText = 'Match Budget';
+                            statusColor = 'text-emerald-500';
+                        } else if (ratio < 0.95) {
+                            barGradient = 'linear-gradient(90deg, #fca5a5 0%, #ef4444 100%)';
+                            statusText = 'Hors Budget';
+                            statusColor = 'text-rose-500';
+                        }
+
+                        return '<div>' +
+                            '<div class="flex justify-between items-center text-[8px] mb-1 px-1">' +
+                            '<div class="flex items-center gap-1.5">' +
+                            '<span class="text-gray-600 font-bold">' + label + '</span>' +
+                            '<span class="text-[7px] font-bold ' + statusColor + ' uppercase opacity-80">' + statusText + '</span>' +
+                            '</div>' +
+                            '<span class="font-bold text-gray-800">' + pct + '%</span>' +
+                            '</div>' +
+                            '<div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">' +
+                            '<div class="h-full shadow-sm" style="width: ' + pct + '%; background: ' + barGradient + '"></div>' +
+                            '</div>' +
+                            '</div>';
+                    }).join('')}
+                </div>
+            </div>
+            ` : ''}
+            </div>
+        </div>
+    `;
+}
+
 function renderCategoryDetails(id, props, cat, matchData) {
     const budget = parseInt(document.getElementById('budget-input')?.value || 850000);
     const segment = props[window.currentPropertyType || 'all'] || props.all || { price: 5000, vol: 0 };
 
     switch (id) {
         case 'immo':
-            const evolutionH = props.evolution || [];
-            const vol = segment?.vol || 0;
-            const liquidity = Math.min(100, vol * 15);
-            return `
-                <div class="px-4 pb-4 space-y-4">
-                    <div class="pt-2 border-t border-gray-100">
-                    ${matchData.details.immo.availability === 0 ? `
-                    <div class="bg-red-50 p-2 rounded-lg border border-red-100 flex items-center gap-2 mb-3">
-                        <span class="text-sm">⚠️</span>
-                        <div class="flex flex-col">
-                            <span class="text-[9px] font-black text-red-800 uppercase">Indisponible</span>
-                            <span class="text-[8px] text-red-600">Aucun bien de type "${(window.currentPropertyType || 'all') === 'house' ? 'Maison' : 'Appartement'}" dans ce quartier.</span>
-                        </div>
-                    </div>
-                    ` : ''}
-
-                    <div class="bg-white/40 p-3 rounded-xl border border-gray-100 shadow-sm">
-                        <div class="flex justify-between items-center mb-1">
-                            <span class="text-[10px] text-gray-500 uppercase font-black">Prix Marché</span>
-                            <span class="text-[14px] font-black text-gray-900">${new Intl.NumberFormat('fr-FR').format(segment?.price || 0)} €/m²</span>
-                        </div>
-                        ${window.renderHistoricalTrend(props.evolution_house, props.evolution_apt)}
-                    </div>
-
-                    <!-- Core Metrics Unified -->
-                    <div class="mt-4 space-y-3">
-                        <!-- Match Budget -->
-                        <div class="bg-white p-3.5 rounded-xl border border-gray-100 shadow-sm transition-all duration-500">
-                            <div class="flex justify-between items-end mb-2">
-                                <div class="flex flex-col">
-                                    <span class="text-[9px] font-black uppercase text-gray-500 tracking-widest">Match Budget</span>
-                                    <span class="text-[8px] text-gray-400 font-medium">Taille idéale visée : ${Math.round(budget / (segment?.price || 1))} m²</span>
-                                </div>
-                                <span class="text-[14px] font-black text-gray-800">${matchData.details.immo.fitScore}%</span>
-                            </div>
-                            <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                                <div class="h-full transition-all duration-700" style="width: ${matchData.details.immo.fitScore}%; background: ${matchData.details.immo.fitScore >= 80 ? 'linear-gradient(90deg, #4ade80 0%, #22c55e 100%)' : (matchData.details.immo.fitScore >= 50 ? 'linear-gradient(90deg, #fcd34d 0%, #f59e0b 100%)' : 'linear-gradient(90deg, #fca5a5 0%, #ef4444 100%)')};"></div>
-                            </div>
-                        </div>
-
-                        <!-- Type de bien recherché -->
-                        <div class="bg-white p-3.5 rounded-xl border border-gray-100 shadow-sm transition-all duration-500">
-                            <div class="flex justify-between items-end mb-2">
-                                <div class="flex flex-col">
-                                    <span class="text-[9px] font-black uppercase text-gray-500 tracking-widest">Bien Ciblé</span>
-                                    <span class="text-[8px] text-gray-400 font-medium">${window.currentPropertyType === 'house' ? 'Maisons' : (window.currentPropertyType === 'apt' ? 'Appartements' : 'Logements')} ≥ ${document.getElementById('surface-input')?.value || '?'}</span>
-                                </div>
-                                <span class="text-[14px] font-black text-gray-800">${matchData.details.immo.finalAvailabilityPct}%</span>
-                            </div>
-                            <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                                <div class="h-full transition-all duration-700" style="width: ${matchData.details.immo.finalAvailabilityPct}%; background: ${matchData.details.immo.finalAvailabilityPct >= 15 ? 'linear-gradient(90deg, #60a5fa 0%, #3b82f6 100%)' : (matchData.details.immo.finalAvailabilityPct >= 7 ? 'linear-gradient(90deg, #fcd34d 0%, #f59e0b 100%)' : 'linear-gradient(90deg, #fca5a5 0%, #ef4444 100%)')};"></div>
-                            </div>
-                        </div>
-
-                        <!-- Liquidité -->
-                        <div class="bg-white p-3.5 rounded-xl border border-gray-100 shadow-sm transition-all duration-500">
-                            <div class="flex justify-between items-end mb-2">
-                                <div class="flex flex-col">
-                                    <span class="text-[9px] font-black uppercase text-gray-500 tracking-widest">Liquidité Marché</span>
-                                    <span class="text-[8px] text-gray-400 font-medium">${vol} transactions / an</span>
-                                </div>
-                                <span class="text-[14px] font-black text-gray-800">${liquidity}%</span>
-                            </div>
-                            <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                                <div class="h-full transition-all duration-700" style="width: ${liquidity}%; background: linear-gradient(90deg, #a78bfa 0%, #8b5cf6 100%);"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Surface Distribution -->
-                    ${props.demo?.surface_dist ? `
-                    <div class="mt-6 pt-4 border-t border-gray-100">
-                        <div class="flex justify-between items-end mb-3">
-                            <div class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Répartition des surfaces (existantes)</div>
-                        </div>
-                        <div class="space-y-2.5">
-                            ${Object.entries(props.demo.surface_dist).map(([label, pct]) => {
-                const bValues = { "<30m²": 20, "30-40m²": 35, "40-60m²": 50, "60-80m²": 70, "80-100m²": 90, "100-120m²": 110, "120m²+": 140 };
-                const avgSize = bValues[label] || 50;
-                const est = budget / (segment?.price || 1);
-                const ratio = est / avgSize;
-                let barGradient = 'linear-gradient(90deg, #fcd34d 0%, #f59e0b 100%)';
-                let statusText = 'Trop petit';
-                let statusColor = 'text-amber-500';
-                if (ratio >= 0.95 && ratio <= 1.25) {
-                    barGradient = 'linear-gradient(90deg, #4ade80 0%, #22c55e 100%)';
-                    statusText = 'Match Budget';
-                    statusColor = 'text-emerald-500';
-                } else if (ratio < 0.95) {
-                    barGradient = 'linear-gradient(90deg, #fca5a5 0%, #ef4444 100%)';
-                    statusText = 'Hors Budget';
-                    statusColor = 'text-rose-500';
-                }
-
-                return '<div>' +
-                    '<div class="flex justify-between items-center text-[8px] mb-1 px-1">' +
-                    '<div class="flex items-center gap-1.5">' +
-                    '<span class="text-gray-600 font-bold">' + label + '</span>' +
-                    '<span class="text-[7px] font-bold ' + statusColor + ' uppercase opacity-80">' + statusText + '</span>' +
-                    '</div>' +
-                    '<span class="font-bold text-gray-800">' + pct + '%</span>' +
-                    '</div>' +
-                    '<div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">' +
-                    '<div class="h-full shadow-sm" style="width: ' + pct + '%; background: ' + barGradient + '"></div>' +
-                    '</div>' +
-                    '</div>';
-            }).join('')}
-                        </div>
-                    </div>
-                    ` : ''}
-                    </div>
-                </div>
-            `;
+            return renderImmoHTML(props, segment, budget, matchData);
 
         case 'commute': {
             let html = `<div class="px-4 pb-4 space-y-2 mt-1">`;
             const activeHubs = window.activeWorkplaces || [];
+            const hubNames = {
+                'bastille': 'Bastille, Paris',
+                'saint-lazare': 'Saint-Lazare, Paris',
+                'montparnasse': 'Montparnasse, Paris',
+                'la-defense': 'La Défense, Puteaux',
+                'saclay': 'Plateau de Saclay',
+                'saint-denis': 'Saint-Denis Pleyel'
+            };
+
             activeHubs.forEach(wp => {
                 const rawCache = window.precomputedJourneysRaw?.[props.code]?.[wp.id];
+                const hubName = hubNames[wp.id] || wp.id;
 
                 // We might have multiple itineraries for this workplace
                 const itineraries = [];
@@ -2313,159 +2207,171 @@ function renderCategoryDetails(id, props, cat, matchData) {
                     if (rawCache.alternate) {
                         itineraries.push({ ...rawCache.alternate, label: 'Alternatif', key: 'alternate' });
                     }
-                    // Fallback for legacy format
                     if (itineraries.length === 0 && rawCache.duration) {
                         itineraries.push({ ...rawCache, label: 'Itinéraire', key: 'main' });
                     }
                 }
 
-                if (itineraries.length > 0) {
-                    const hubNames = {
-                        'bastille': 'Bastille, Paris',
-                        'saint-lazare': 'Saint-Lazare, Paris',
-                        'montparnasse': 'Montparnasse, Paris',
-                        'la-defense': 'La Défense, Puteaux',
-                        'saclay': 'Plateau de Saclay',
-                        'saint-denis': 'Saint-Denis Pleyel'
-                    };
-                    const hubName = hubNames[wp.id] || wp.id;
+                itineraries.forEach(cached => {
+                    const isOverLimit = cached.duration > wp.limit;
+                    const isSelected = window.commuteItineraryType === cached.key || (window.commuteItineraryType === 'main' && cached.key === 'main');
 
-                    itineraries.forEach(cached => {
-                        const isOverLimit = cached.duration > wp.limit;
-                        const isSelected = window.commuteItineraryType === cached.key || (window.commuteItineraryType === 'main' && cached.key === 'main');
+                    let breakdown = [];
+                    if (cached.sections && cached.sections.length > 0) {
+                        breakdown = cached.sections.filter(s => s.code || ['rer', 'metro', 'bus', 'tram', 'train'].includes(s.type));
+                    } else if (cached.itinerary) {
+                        breakdown = cached.itinerary;
+                    }
 
-                        // Support both old 'itinerary' and new 'sections' format
-                        let breakdown = [];
-                        let firstMile = 0;
-                        let lastMile = 0;
-
-                        if (cached.sections) {
-                            breakdown = cached.sections.filter(s => s.code || ['rer', 'metro', 'bus', 'tram', 'train'].includes(s.type));
-                            firstMile = (cached.sections[0].type === 'walking' || cached.sections[0].type === 'street_network') ? cached.sections[0].duration : 0;
-                            lastMile = (cached.sections[cached.sections.length - 1].type === 'walking' || cached.sections[cached.sections.length - 1].type === 'street_network') ? cached.sections[cached.sections.length - 1].duration : 0;
-                        } else if (cached.itinerary) {
-                            breakdown = cached.itinerary;
-                            firstMile = cached.firstMile || 0;
-                            lastMile = cached.lastMile || 0;
-                        }
-
-                        html += `
-                        <div onclick="window.commuteItineraryType = '${cached.key}'; window.updateWalkingPath(selectedLayer.feature.properties); info.update(selectedLayer.feature.properties, true);"
-                             class="bg-white p-2 rounded-lg border ${isSelected ? 'border-blue-500 ring-2 ring-blue-100' : (isOverLimit ? 'border-red-100 bg-red-50/20' : 'border-gray-100')} shadow-xs hover:border-blue-300 transition-all cursor-pointer mb-2 last:mb-0">
-                            <div class="flex items-center justify-between mb-1.5">
-                                <div class="flex items-center gap-1.5">
-                                    <span class="text-[9px] text-gray-700 font-bold uppercase truncate max-w-[120px]">${hubName}</span>
-                                    <span class="text-[7px] px-1 py-0.5 rounded-md ${cached.key === 'main' ? 'bg-slate-100 text-slate-500' : 'bg-amber-50 text-amber-600'} font-black uppercase tracking-tighter">${cached.label}</span>
+                    html += `
+                    <div onclick="window.commuteItineraryType = '${cached.key}'; window.updateWalkingPath(window.selectedLayer.feature.properties); info.update(window.selectedLayer.feature.properties, true);"
+                         class="relative mb-5 last:mb-0 group cursor-pointer">
+                        <div class="absolute inset-0 bg-[#c4b5fd] rounded-xl translate-x-[4px] translate-y-[4px]"></div>
+                        <div class="relative bg-white border-2 border-[#1e1b4b] rounded-xl p-4 transition-transform group-hover:-translate-y-0.5 group-hover:-translate-x-0.5 ${isSelected ? 'ring-2 ring-blue-400' : ''}">
+                            <div class="flex justify-between items-center mb-4">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="font-black text-[#1e1b4b] text-[13px] tracking-tight uppercase">${hubName}</span>
+                                    <span class="bg-white border-2 border-[#1e1b4b] text-[#1e1b4b] text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${cached.key === 'main' ? '' : 'bg-[#fef08a]'}">${cached.label}</span>
                                 </div>
-                                <span class="text-[9px] font-extrabold px-1.5 py-0.5 ${isOverLimit ? 'bg-red-500' : 'bg-blue-600'} text-white rounded-full shadow-sm">~${cached.duration} min</span>
-                            </div>`;
+                                <div class="relative">
+                                    <div class="absolute inset-0 bg-[#1e1b4b] rounded-lg translate-x-[3px] translate-y-[3px]"></div>
+                                    <span class="relative block ${isOverLimit ? 'bg-red-500' : 'bg-[#2563eb]'} border-2 border-[#1e1b4b] text-white text-[12px] font-black px-3 py-1 rounded-lg">~${cached.duration} min</span>
+                                </div>
+                            </div>
+                            
+                            <div class="flex flex-wrap items-center gap-y-2.5">
+                                ${(() => {
+                                    let stepsHtml = '';
+                                    const firstMile = cached.firstMile || (cached.sections && cached.sections[0]?.type === 'walking' ? cached.sections[0].duration : 0);
+                                    if (firstMile > 0) {
+                                        stepsHtml += `
+                                            <div class="relative">
+                                                <div class="absolute inset-0 bg-[#c4b5fd] rounded-md translate-x-[2px] translate-y-[2px]"></div>
+                                                <div class="relative bg-white border-2 border-[#1e1b4b] px-2 py-0.5 rounded-md flex items-center gap-1.5">
+                                                    <span class="text-xs leading-none">🚶</span>
+                                                    <span class="text-[10px] font-black text-[#1e1b4b]">${firstMile} min</span>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }
 
-                        if (breakdown.length > 0 || firstMile > 0 || lastMile > 0) {
-                            html += `<div class="flex items-center flex-wrap gap-1 mt-1">`;
-                            if (firstMile > 0) html += `<span class="text-[8px] bg-gray-100 px-1 rounded flex items-center gap-0.5">🏃 ${firstMile} min</span>`;
-                            if (firstMile > 0 && breakdown.length > 0) html += `<span class="text-[7px] text-gray-300">→</span>`;
+                                    breakdown.forEach((step, idx) => {
+                                        if (stepsHtml && idx >= 0) {
+                                            stepsHtml += `<svg class="w-4 h-4 mx-1.5 text-[#1e1b4b] stroke-[3px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>`;
+                                        }
+                                        const color = step.color.startsWith('#') ? step.color : `#${step.color}`;
+                                        const textColor = step.textColor ? (step.textColor.startsWith('#') ? step.textColor : `#${step.textColor}`) : '#ffffff';
+                                        let stepDur = step.duration || 0;
+                                        if (stepDur > 60) stepDur = Math.round(stepDur / 60);
 
-                            breakdown.forEach((step, idx) => {
-                                const type = (step.type || "").toLowerCase();
-                                const isCircle = type === "metro" || type === "rer" || type === "train";
-                                const color = step.color.startsWith('#') ? step.color : `#${step.color}`;
-                                const textColor = step.textColor ? (step.textColor.startsWith('#') ? step.textColor : `#${step.textColor}`) : '#ffffff';
+                                        stepsHtml += `
+                                            <div class="relative">
+                                                <div class="absolute inset-0 bg-[#c4b5fd] rounded-md translate-x-[2px] translate-y-[2px]"></div>
+                                                <div class="relative bg-white border-2 border-[#1e1b4b] px-2 py-0.5 rounded-md flex items-center gap-1.5">
+                                                    <div class="w-4 h-4 rounded-sm flex items-center justify-center text-[10px] font-black" style="background-color: ${color}; color: ${textColor}">${step.code}</div>
+                                                    <span class="text-[10px] font-black text-[#1e1b4b]">${stepDur} min</span>
+                                                </div>
+                                            </div>
+                                        `;
+                                    });
 
-                                let stepDuration = step.duration || 0;
-                                if (stepDuration > 60) stepDuration = Math.round(stepDuration / 60);
-
-                                html += `
-                                    <div class="flex items-center gap-1 group relative">
-                                        <div class="flex items-center gap-0.5">
-                                            <span class="flex items-center justify-center font-bold text-[7px] shadow-xs border border-black/10" 
-                                                  style="width:13px; height:13px; border-radius: ${isCircle ? '50%' : '2px'}; color: ${textColor}; background-color: ${color};">
-                                                ${step.code}
-                                            </span>
-                                            <span class="text-[7px] text-gray-400 font-medium">${stepDuration ? stepDuration + ' min' : ''}</span>
-                                        </div>
-                                    </div>`;
-                                if (idx < breakdown.length - 1) html += `<span class="text-[7px] text-gray-300">→</span>`;
-                            });
-
-                            if (lastMile > 0 && breakdown.length > 0) html += `<span class="text-[7px] text-gray-300">→</span>`;
-                            if (lastMile > 0) html += `<span class="text-[8px] bg-gray-100 px-1 rounded flex items-center gap-0.5">🏃 ${lastMile} min</span>`;
-
-                            html += `</div>`;
-                        }
-                        html += `</div>`;
-                    });
-                }
+                                    const lastMile = cached.lastMile || (cached.sections && cached.sections[cached.sections.length-1]?.type === 'walking' ? cached.sections[cached.sections.length-1].duration : 0);
+                                    if (lastMile > 0) {
+                                        stepsHtml += `<svg class="w-4 h-4 mx-1.5 text-[#1e1b4b] stroke-[3px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>`;
+                                        stepsHtml += `
+                                            <div class="relative">
+                                                <div class="absolute inset-0 bg-[#c4b5fd] rounded-md translate-x-[2px] translate-y-[2px]"></div>
+                                                <div class="relative bg-white border-2 border-[#1e1b4b] px-2 py-0.5 rounded-md flex items-center gap-1.5">
+                                                    <span class="text-xs leading-none">🚶</span>
+                                                    <span class="text-[10px] font-black text-[#1e1b4b]">${lastMile} min</span>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }
+                                    return stepsHtml;
+                                })()}
+                            </div>
+                        </div>
+                    </div>`;
+                });
             });
             html += `</div>`;
             return html;
         }
+
         case 'mobility': {
             let html = `<div class="px-4 pb-4 space-y-3 mt-1">`;
             const centroid = window.irisCentroids?.[props.code] || { lat: props.lat, lon: props.lon };
 
             // Nearby Stations (Metro, RER, Train)
             const nearby = (window.allStationsData || [])
-                .map(s => ({ ...s, dist: getDistance(centroid.lat, centroid.lon, s.lat, s.lon) }))
+                .filter(s => s && s.lat != null && s.lon != null)
+                .map(s => ({ ...s, dist: getDistance(centroid.lat || props.lat, centroid.lon || props.lon, s.lat, s.lon) }))
                 .filter(s => s.dist < 800)
                 .sort((a, b) => a.dist - b.dist);
 
             if (nearby.length > 0) {
                 html += `
-                <div class="space-y-1.5">
-                    <div class="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-2">Stations à proximité</div>
+                <div class="space-y-3">
+                    <div class="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1 mt-4">Stations à proximité</div>
                     ${nearby.map(s => {
                     return `
                         <div onmouseover="window.highlightPathByName('${s.name}')" 
                              onmouseout="window.highlightPathByName(null)"
-                             class="bg-white p-2 rounded-xl border border-gray-100 flex items-center justify-between shadow-xs hover:border-blue-300 transition-all cursor-pointer">
-                            <div class="flex flex-col">
-                                <span class="text-[10px] font-black text-gray-800 leading-tight mb-1">${s.name}</span>
-                                <div class="flex items-center gap-1">
-                                    <span class="text-[7px] font-bold px-1 rounded bg-gray-100 text-gray-500 uppercase">${s.mode}</span>
-                                    <span class="text-[8px] text-gray-400 font-medium">${s.lines}</span>
+                             class="relative group cursor-pointer mb-3">
+                            <div class="absolute inset-0 bg-[#c4b5fd] rounded-xl translate-x-[2px] translate-y-[2px]"></div>
+                            <div class="relative bg-white border-2 border-[#1e1b4b] p-2.5 rounded-xl flex items-center justify-between transition-transform group-hover:-translate-y-0.5 group-hover:-translate-x-0.5">
+                                <div class="flex flex-col">
+                                    <span class="text-[11px] font-black text-[#1e1b4b] leading-tight mb-1.5">${s.name}</span>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-[7px] font-black px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 uppercase tracking-tighter">${s.mode}</span>
+                                        <span class="text-[9px] text-slate-400 font-bold tracking-tight">${s.lines}</span>
+                                    </div>
                                 </div>
+                                <span class="text-[10px] font-black ${s.dist < 400 ? 'text-emerald-600' : 'text-slate-400'} bg-slate-50 px-2 py-1 rounded-md border border-slate-100">${Math.round(s.dist)}m</span>
                             </div>
-                            <span class="text-[9px] font-black ${s.dist < 400 ? 'text-emerald-600' : 'text-gray-400'}">${Math.round(s.dist)}m</span>
                         </div>`;
                 }).join('')}
                 </div>`;
             } else {
-                html += `<div class="text-[9px] italic text-gray-400 text-center py-2 bg-gray-50 rounded-xl">Aucune station de métro/RER à moins de 800m</div>`;
+                html += `<div class="text-[9px] italic text-gray-400 text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">Aucune station à moins de 800m</div>`;
             }
 
             // Grand Paris Express Section
             if (window.gpeStationsData) {
                 const nearGPE = window.gpeStationsData
-                    .map(s => ({ ...s, dist: getDistance(centroid.lat, centroid.lon, s.lat, s.lon) }))
+                    .filter(s => s && s.lat != null && s.lon != null)
+                    .map(s => ({ ...s, dist: getDistance(centroid.lat || props.lat, centroid.lon || props.lon, s.lat, s.lon) }))
                     .filter(s => s.dist < 1500)
                     .sort((a, b) => a.dist - b.dist);
 
                 if (nearGPE.length > 0) {
                     html += `
-                    <div class="pt-3 border-t border-gray-100">
-                        <div class="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
+                    <div class="pt-5 mt-5 border-t-2 border-slate-100">
+                        <div class="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-3 flex items-center gap-2">
                             <span class="text-xs">✨</span> Grand Paris Express
                         </div>
-                        <div class="space-y-2">
+                        <div class="space-y-4">
                             ${nearGPE.map(s => `
-                                <div onmouseover="window.highlightPathByName('${s.name}')" 
-                                     onmouseout="window.highlightPathByName(null)"
-                                     class="bg-emerald-50/20 p-2 rounded-xl border border-emerald-100/50 flex items-center justify-between hover:border-emerald-300 transition-all cursor-pointer">
-                                    <div class="flex flex-col">
-                                        <div class="flex items-center gap-1.5 mb-1">
-                                            <span class="text-[10px] font-black text-emerald-900 leading-none">${s.name}</span>
-                                            ${s.dist <= 800 ? '<span class="text-[7px] bg-emerald-600 text-white px-1.5 py-0.5 rounded-md font-black uppercase tracking-tighter shadow-sm">Proche</span>' : ''}
+                                <div class="relative group cursor-pointer mb-3">
+                                    <div class="absolute inset-0 bg-[#dcfce7] rounded-xl translate-x-[2px] translate-y-[2px]"></div>
+                                    <div class="relative bg-white border-2 border-emerald-800 p-2.5 rounded-xl flex items-center justify-between transition-transform group-hover:-translate-y-0.5 group-hover:-translate-x-0.5">
+                                        <div class="flex flex-col">
+                                            <div class="flex items-center gap-2 mb-1.5">
+                                                <span class="text-[11px] font-black text-emerald-900 leading-none">${s.name}</span>
+                                                ${s.dist <= 800 ? '<span class="text-[7px] bg-emerald-600 text-white px-1.5 py-0.5 rounded-md font-black uppercase tracking-tighter shadow-sm">Proche</span>' : ''}
+                                            </div>
+                                            <div class="flex items-center gap-1.5">
+                                                ${s.lines.map(l => {
+                                                    const c = idfmColors[l] || { bg: "#eee", text: "#000" };
+                                                    return `<span class="px-1.5 py-0.5 rounded text-[8px] font-black border border-black/5" style="background-color: ${c.bg}; color: ${c.text};">L.${l}</span>`;
+                                                }).join('')}
+                                            </div>
                                         </div>
-                                        <div class="flex items-center gap-1">
-                                            ${s.lines.map(l => {
-                        const c = idfmColors[l] || { bg: "#eee", text: "#000" };
-                        return `<span class="px-1.5 py-0.5 rounded text-[7px] font-black" style="background-color: ${c.bg}; color: ${c.text};">L.${l}</span>`;
-                    }).join('')}
+                                        <div class="text-right">
+                                            <div class="text-[10px] font-black ${s.year <= 2024 ? 'text-blue-600' : 'text-emerald-700'}">${s.year <= 2024 ? 'Service 🟢' : s.year}</div>
+                                            <div class="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">${Math.round(s.dist)}m</div>
                                         </div>
-                                    </div>
-                                    <div class="text-right">
-                                        <div class="text-[10px] font-black ${s.year <= 2024 ? 'text-blue-600' : 'text-emerald-700'}">${s.year <= 2024 ? 'Service 🟢' : s.year}</div>
-                                        <div class="text-[8px] text-gray-400 font-bold uppercase tracking-tighter">${Math.round(s.dist)}m</div>
                                     </div>
                                 </div>
                             `).join('')}
@@ -2473,6 +2379,8 @@ function renderCategoryDetails(id, props, cat, matchData) {
                     </div>`;
                 }
             }
+
+
             // Car Ownership Section
             if (props.demo && props.demo.car_pct !== undefined) {
                 html += `
@@ -2506,7 +2414,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
                                 <span class="text-[11px] font-black text-gray-800 leading-tight">${wm.targetName}</span>
                             </div>
                             <div class="text-right">
-                                <span class="text-[16px] font-black text-emerald-700 leading-none">${(wm.distance_km).toFixed(1)}</span>
+                                <span class="text-[16px] font-black text-emerald-700 leading-none">${Number(wm.distance_km || 0).toFixed(1)}</span>
                                 <span class="text-[9px] text-emerald-600 font-bold uppercase">km</span>
                             </div>
                         </div>
@@ -2791,7 +2699,7 @@ function renderCategoryDetails(id, props, cat, matchData) {
                             <p class="text-[7px] text-gray-400 mt-0.5">Taux de pauvreté</p>
                         </div>
                         <div class="bg-white p-2 rounded-lg border border-gray-100 shadow-xs">
-                            <span class="text-[8px] text-gray-400 uppercase font-black block mb-1">🏢 Social</span>
+                            <span class="text-[8px] text-gray-400 uppercase font-black block mb-1"> Social</span>
                             <span class="text-[11px] font-bold text-gray-800">${d.social_pct || 0}%</span>
                             <p class="text-[7px] text-gray-400 mt-0.5">Logements HLM</p>
                         </div>
@@ -3230,20 +3138,58 @@ function cleanName(name) {
     return name.replace(/\s*\(.*commune non irisée.*\)/gi, '').trim();
 }
 
-function calculateMatchRate(props) {
+// --- PERFORMANCE CACHE & CONTEXT ---
+window.globalCacheKey = "";
+window.appContext = {
+    budget: 850000,
+    minSurface: 70,
+    surfaceBucket: "60-80m2",
+    propertyType: 'all',
+    searchCriteria: [],
+    activeAxisId: null
+};
+
+function calculateMatchRate(props, forceRefresh = false) {
+    if (!props) return { total: 0, categories: {} };
+
+    // MEMOIZATION CHECK (Safety for serialized props)
+    if (typeof props.memo === 'string') {
+        try {
+            props.memo = JSON.parse(props.memo);
+        } catch (e) {
+            props.memo = { cacheKey: null, matchData: null };
+        }
+    }
+
+    if (!forceRefresh && props.memo && props.memo.cacheKey === window.globalCacheKey) {
+        return props.memo.matchData;
+    }
+
+    const matchData = _calculateMatchRate(props);
+    
+    // CACHE RESULT
+    if (props.memo && typeof props.memo === 'object') {
+        props.memo.cacheKey = window.globalCacheKey;
+        props.memo.matchData = matchData;
+    }
+    
+    return matchData;
+}
+
+function _calculateMatchRate(props) {
     if (!props) return { total: 0, categories: {} };
 
     // --- PARIS EXCLUSION ---
     const insee = props.code || "";
     if (insee.startsWith('75')) {
-        return { total: -2, isParis: true, categories: {}, exclusionReason: 'paris' };
+        return { total: -2, isParis: true, categories: {}, details: { immo: {}, mobility: {}, env: {} }, exclusionReason: 'paris' };
     }
 
     let criteriaMultiplier = 1.0;
     if (window.searchCriteria && window.searchCriteria.length > 0) {
         for (const crit of window.searchCriteria) {
             if (!evaluateCriterion(props, crit)) {
-                return { total: -1, excluded: true, categories: {}, exclusionReason: crit.property };
+                return { total: -1, excluded: true, categories: {}, details: { immo: {}, mobility: {}, env: {} }, exclusionReason: crit.property };
             }
             // Add a small boost for "extra" margin on some criteria
             if (crit.property === 'budget') {
@@ -3260,21 +3206,16 @@ function calculateMatchRate(props) {
     // --- TRANSIT AXIS FILTER ---
     if (window.activeAxisId) {
         if (window.axisMembership && !window.axisMembership[props.code]) {
-            return { total: -1, excluded: true, categories: {} };
+            return { total: -1, excluded: true, categories: {}, details: { immo: {}, mobility: {}, env: {} } };
         }
     }
 
     try {
         if (!props || !props.code) return { total: 0, categories: {}, details: { immo: {}, mobility: {}, env: {} } };
 
-        const budgetRaw = document.getElementById('budget-input')?.value || "850000";
-        const budget = parseInt(String(budgetRaw).replace(/\s/g, '').replace(/[^0-9]/g, '')) || 850000;
-
-        const surfaceBucket = document.getElementById('surface-input')?.value || "60-80m²";
-        const bucketValues = {
-            "<30m²": 20, "30-40m²": 35, "40-60m²": 50, "60-80m²": 70, "80-100m²": 90, "100-120m²": 110, "120m²+": 140
-        };
-        const minSurface = bucketValues[surfaceBucket] || 70;
+        const budget = window.appContext.budget;
+        const surfaceBucket = window.appContext.surfaceBucket;
+        const minSurface = window.appContext.minSurface;
 
         const insee = props.code;
         const currentType = window.currentPropertyType || 'all';
@@ -3305,7 +3246,7 @@ function calculateMatchRate(props) {
 
         // 1b. LOCAL SURFACE AVAILABILITY
         // Calculate % of housing park matching or exceeding the requested size bucket
-        const surfaceBuckets = ["<30m²", "30-40m²", "40-60m²", "60-80m²", "80-100m²", "100-120m²", "120m²+"];
+        const surfaceBuckets = ["<30m2", "30-40m2", "40-60m2", "60-80m2", "80-100m2", "100-120m2", "120m2+"];
 
         // Robust matching: normalize strings to avoid character/space mismatches
         const normalize = (s) => String(s || '').replace(/\s/g, '').replace('²', '2').replace('–', '-').replace('+', '');
@@ -3392,9 +3333,10 @@ function calculateMatchRate(props) {
         };
 
         // 5. VIE DE QUARTIER (Merge of Services & Sorties)
-        // DYNAMIC OVERRIDE: Re-calculate counts to ensure accuracy (e.g. Bio stores in Vésinet)
-        // Increased radius to 2500m to catch nearby alternatives in spread-out areas
-        const dynamicCounts = window.countNearbyAmenities(insee, 2500);
+        if (!props.dynamicCounts && props.lat && props.lon && window.countNearbyAmenities) {
+            props.dynamicCounts = window.countNearbyAmenities(props.code, 2500);
+        }
+        const dynamicCounts = props.dynamicCounts || { boulangerie: 0, bio: 0 }; 
         const mergedCounts = { ...(props.counts || {}), ...dynamicCounts };
         
         const walkMeta = window.walkingMetadata?.[insee];
@@ -3458,12 +3400,13 @@ function calculateMatchRate(props) {
             mobility: { score: mobilityScore, label: "Mobilité", icon: "⚡", color: "text-blue-600" },
             commute: {
                 score: commuteScore,
-                label: "Trajets du quotidien",
+                label: "Trajets Quotidiens",
+
                 icon: "🕒",
                 color: "text-indigo-600",
-                isHidden: !cachedMobility.hasWorkplaces
+                isHidden: !window.activeWorkplaces || window.activeWorkplaces.length === 0
             },
-            urbanisme: { score: urbanismeScore, label: "Urbanisme", icon: "🏢", color: "text-emerald-600" },
+            urbanisme: { score: urbanismeScore, label: "Urbanisme", icon: "", color: "text-emerald-600" },
             vieQuartier: {
                 score: vieQuartierScore,
                 label: "Vie de quartier",
@@ -3474,7 +3417,7 @@ function calculateMatchRate(props) {
             infra: {
                 score: staticScores.infra || 0,
                 label: "Infrastructures Municipales",
-                icon: "🏢",
+                icon: "",
                 color: "text-blue-700",
                 details: {
                     biblios: counts.biblios,
@@ -3686,10 +3629,7 @@ function calculateMatchRate(props) {
         // 9. PREFERENCE WEIGHTING (Soft Influence)
         let preferenceMultiplier = 1.0;
         Object.entries(categories).forEach(([id, cat]) => {
-            // Find active chip value for this category
-            const container = document.getElementById('pref-' + id);
-            const activeChip = container?.querySelector('.pref-chip.active');
-            const prefValue = activeChip?.getAttribute('data-value');
+            const prefValue = window.appContext.preferences?.[id];
 
             if (prefValue) {
                 const prefIdx = cat.scale.indexOf(prefValue);
@@ -3716,11 +3656,12 @@ function calculateMatchRate(props) {
         const baseScore = immoScore * 0.4 + neighborhoodScore * 0.6;
         const total = Math.round(baseScore * vibeRatio * preferenceMultiplier * criteriaMultiplier);
 
-        return {
-            total: Math.min(100, total),
+        const finalScore = Math.min(100, total);
+        const matchData = {
+            total: finalScore,
             vibeMatch: Math.round(vibeRatio * 100),
-            excluded: false,
-            reason: "",
+            excluded: isExcluded,
+            reason: exclusionReason,
             categories,
             details: {
                 immo: { fitScore, availability, surfaceScore, availabilityPct, availabilityScore, finalAvailabilityPct },
@@ -3737,6 +3678,11 @@ function calculateMatchRate(props) {
                 family: { pediatresCount: pedCount }
             }
         };
+
+        // INTEGRATE VISIBILITY LOGIC HERE TO MEMOIZE IT
+        matchData.isVisible = isIrisVisible(props.code, finalScore, matchData, props);
+
+        return matchData;
     } catch (e) {
         console.error("MatchRate Error:", e, props);
         const emptyCat = { score: 0, appreciation: "N/A", ratingColor: "text-gray-300", scale: [], scaleIndex: -1, details: {} };
@@ -3747,7 +3693,8 @@ function calculateMatchRate(props) {
                 immo: emptyCat, mobility: emptyCat, commute: emptyCat, urbanisme: emptyCat, vieQuartier: emptyCat,
                 family: emptyCat, infra: emptyCat, safety: emptyCat, socio: emptyCat, demo: emptyCat
             },
-            details: { immo: {}, mobility: {}, env: {} }
+            details: { immo: {}, mobility: {}, env: {} },
+            isVisible: true
         };
     }
 }
@@ -3827,10 +3774,10 @@ function style(feature) {
         };
     }
 
-    // 1. Calculate Score & Visibility
+    // 1. Calculate Score & Visibility (Memoized)
     const matchData = calculateMatchRate(props);
     const score = matchData.total;
-    const isVisible = isIrisVisible(insee, score, matchData, props);
+    const isVisible = matchData.isVisible;
 
     // 2. Zoom State
     const zoom = window.map.getZoom();
@@ -3892,258 +3839,153 @@ function highlightFeature(e) {
 
 
 function updateProximityCircle(lat, lon) {
-    if (window.proximityLayer) {
-        window.proximityLayer.clearLayers();
-    } else {
-        window.proximityLayer = L.layerGroup().addTo(window.map);
-    }
+    const source = map.getSource('proximity');
+    if (!source) return;
 
     if (!lat || !lon) {
-        window.proximityCircle = null;
+        source.setData({ type: 'FeatureCollection', features: [] });
         return;
     }
 
-    // window.proximityCircle = L.circle([lat, lon], {
-    //     radius: 800,
-    //     color: '#1e293b',
-    //     weight: 1.5,
-    //     fillColor: '#1e293b',
-    //     fillOpacity: 0.04,
-    //     dashArray: '5, 5',
-    //     interactive: false
-    // }).addTo(window.proximityLayer);
+    if (typeof turf !== 'undefined') {
+        const circle = turf.circle([lon, lat], 0.8, { units: 'kilometers' });
+        source.setData(circle);
+    }
 }
 
 function updateCentroidMarker(lat, lon) {
-    if (centroidMarker) {
-        window.map.removeLayer(centroidMarker);
-        centroidMarker = null;
-    }
-    if (lat && lon) {
-        const icon = L.divIcon({
-            className: 'centroid-container',
-            html: '<div class="centroid-pulse"></div>',
-            iconSize: [12, 12],
-            iconAnchor: [6, 6]
-        });
-        centroidMarker = L.marker([lat, lon], {
-            icon: icon,
-            interactive: false,
-            zIndexOffset: 1000
-        }).addTo(window.map);
-    }
-}
-
-function resetHighlight(e) {
-    const layer = e.target;
-    if (layer !== selectedLayer) {
-        // Force a total style reset including stroke properties
-        layer.setStyle({
-            stroke: false,
-            weight: 0,
-            fillOpacity: 0.55,
-            color: 'transparent'
-        });
-        // Then apply the dynamic style
-        layer.setStyle(style(layer.feature));
-
-        if (selectedLayer) {
-            const p = selectedLayer.feature.properties;
-            info.update(p, true);
-            updateCentroidMarker(p.lat, p.lon);
-            updateProximityCircle(p.lat, p.lon);
+    const source = map.getSource('centroid');
+    if (source) {
+        if (lat && lon) {
+            source.setData({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [lon, lat] }
+            });
         } else {
-            info.update();
-            updateProximityCircle(null);
-            if (centroidMarker) {
-                window.map.removeLayer(centroidMarker);
-                centroidMarker = null;
-            }
+            source.setData({ type: 'FeatureCollection', features: [] });
         }
     }
 }
+
 async function selectFeature(e) {
     try {
-        const layer = e.target || e;
-        if (!layer || !layer.feature) return;
+        const feature = e.target?.feature || e.feature || (e.features && e.features[0]) || e;
+        if (!feature) return;
+        const props = feature.properties;
         const noZoom = e.noZoom || false;
+        const communeName = getCommuneName(props, props.code || feature.id);
 
-        const communeName = getCommuneName(layer.feature.properties, layer.feature.id);
-
-        // Prevent propagation to map.click
-        if (e && e.originalEvent) {
-            L.DomEvent.stopPropagation(e.originalEvent);
-            e.originalEvent._handledByFeature = true;
-        }
-
-        if (window.selectedLayer === layer && !noZoom) {
+        if (window.selectedFeatureId === (props.code || feature.id) && !noZoom) {
             deselectFeature();
             return;
         }
 
-        const props = layer.feature.properties;
-        const prevLayer = window.selectedLayer;
-        window.selectedLayer = layer;
+        window.selectedFeatureId = props.code || feature.id;
+        window.selectedProps = props;
+        window.selectedLayer = { feature: feature }; // Legacy shim
 
-        if (prevLayer) {
-            prevLayer.setStyle(style(prevLayer.feature));
+        // MapLibre Selection Highlight
+        const highlightSource = map.getSource('commune-highlight');
+        if (highlightSource) {
+            highlightSource.setData({ type: 'FeatureCollection', features: [feature] });
         }
 
-        // Apply selection style
-        const score = calculateMatchRate(props).total;
-        layer.setStyle({
-            weight: 2.5,
-            color: '#ffffff',
-            dashArray: '',
-            opacity: 1,
-            fillColor: getColor(score),
-            fillOpacity: 0.8,
-            stroke: true
-        });
-        layer.bringToFront();
-
-        // ZOOM LOGIC: Simplified & Centered for single left sidebar
+        // ZOOM LOGIC
         if (!noZoom && !e.isAuto) {
-            const isCommuteMode = window.activeAccordion === 'commute';
+            map.flyTo({
+                center: [props.lon, props.lat],
+                zoom: 14.5,
+                padding: { left: 400, top: 80, right: 80, bottom: 80 },
+                duration: 1500,
+                essential: true
+            });
+        }
+
+        // Run heavy updates in parallel and non-blocking
+        setTimeout(() => {
+// Removed setMinZoom restriction to allow free exploration
             
-            if (isCommuteMode) {
-                // Show the whole journey for the newly selected IRIS
-                const irisBounds = layer.getBounds();
-                const commuteCriteria = (window.searchCriteria || []).find(c => c.property === 'commute');
-                const hubId = commuteCriteria?.workplace || (window.activeWorkplaces?.[0]?.id) || 'bastille';
-                const hub = window.HUBS_COORDS?.[hubId];
-                
-                if (hub) {
-                    const journeyBounds = L.latLngBounds(irisBounds.getSouthWest(), irisBounds.getNorthEast());
-                    journeyBounds.extend(L.latLng(hub.lat, hub.lon));
-                    map.flyToBounds(journeyBounds, {
-                        paddingTopLeft: [420, 100],
-                        paddingBottomRight: [100, 100],
-                        maxZoom: 13,
-                        duration: 1.2
-                    });
-                    map.setMinZoom(11); // Allow more de-zoom to see the whole path
-                } else {
-                    map.flyToBounds(layer.getBounds(), {
-                        paddingTopLeft: [420, 80],
-                        paddingBottomRight: [100, 80],
-                        maxZoom: 15,
-                        duration: 1.2
-                    });
-                    map.setMinZoom(13.5);
+            window.updateWalkingPath(props).then(() => {
+                if (props.lat && props.lon) {
+                    updateCentroidMarker(props.lat, props.lon);
+                    updateProximityCircle(props.lat, props.lon);
                 }
-            } else {
-                // Normal neighborhood focus
-                map.flyToBounds(layer.getBounds(), {
-                    paddingTopLeft: [420, 80],
-                    paddingBottomRight: [100, 80],
-                    maxZoom: 15,
-                    duration: 1.2,
-                    easeLinearity: 0.2
-                });
-                map.setMinZoom(13.5);
-            }
-        }
+                
+                if (window.activeCommuneName !== communeName) {
+                    if (window.drawCityBoundaries) window.drawCityBoundaries(communeName);
+                }
 
-        await window.updateWalkingPath(props);
-        if (props.lat && props.lon) {
-            updateCentroidMarker(props.lat, props.lon);
-            updateProximityCircle(props.lat, props.lon);
-        }
+                if (!window.activeAccordion) {
+                    window.activeAccordion = 'vieQuartier';
+                }
+                
+                // Update markers and paths according to active category (NO ZOOM as we are already zooming)
+                if (window.updateContextualMap) window.updateContextualMap(window.activeAccordion, true);
 
-        if (window.activeCommuneName !== communeName) {
-            window.activeCommuneName = communeName;
-            if (window.drawCityBoundaries) window.drawCityBoundaries(communeName);
-        }
-
-        info.update(props, true);
-        if (window.renderActiveLayers) window.renderActiveLayers(true);
-        if (window.updateTopMatches) window.updateTopMatches();
+                info.update(props, true);
+                
+                setTimeout(() => {
+                    if (window.renderActiveLayers) window.renderActiveLayers(true);
+                }, 150);
+            });
+        }, 400);
 
     } catch (err) {
         console.error("❌ [selectFeature] Error:", err);
     }
 };
 
+window.cityBoundariesCache = {};
 window.drawCityBoundaries = function(communeName) {
-    if (!window.allIrisData || !window.communeHighlightLayer) return;
-    window.communeHighlightLayer.clearLayers();
+    if (!window.map || !communeName) return;
+    window.activeCommuneName = communeName;
     
-    const cityIris = window.allIrisData.features.filter(f => 
-        (f.properties.nom_com || f.properties.commune || "").toLowerCase() === communeName.toLowerCase()
-    );
-    
-    if (cityIris.length === 0) return;
+    const source = map.getSource('commune-highlight');
+    if (!source) return;
 
-    // Style pour les frontières de la ville (Noir pour meilleur contraste)
-    const style = {
-        color: '#000000',
-        weight: 3,
-        dashArray: '8, 8',
-        fill: true,
-        fillColor: '#000000',
-        fillOpacity: 0.02,
-        opacity: 0.4,
-        interactive: false,
-        lineCap: 'round'
-    };
-
-    // Si Turf est disponible, on fusionne les IRIS pour n'avoir que le contour extérieur
-    if (typeof turf !== 'undefined' && cityIris.length > 1) {
-        try {
-            let merged = cityIris[0];
-            for (let i = 1; i < cityIris.length; i++) {
-                merged = turf.union(merged, cityIris[i]);
-            }
-            L.geoJSON(merged, { style: style }).addTo(window.communeHighlightLayer);
-            return;
-        } catch (e) {
-            console.warn("Turf union failed, using group fallback");
-        }
+    if (window.cityBoundariesCache[communeName]) {
+        source.setData(window.cityBoundariesCache[communeName]);
+        return;
     }
 
-    // Fallback : affichage de tous les IRIS de la ville
-    L.geoJSON({ type: "FeatureCollection", features: cityIris }, {
-        style: { ...style, weight: 1.5, opacity: 0.15 }
-    }).addTo(window.communeHighlightLayer);
+    const cityFeatures = (window.allNeighborhoods || []).filter(f => 
+        getCommuneName(f.properties, f.properties.code || f.id) === communeName
+    );
+    if (cityFeatures.length === 0) return;
+
+    try {
+        if (typeof turf !== 'undefined' && cityFeatures.length > 1) {
+            let unioned = cityFeatures[0];
+            for (let i = 1; i < cityFeatures.length; i++) {
+                unioned = turf.union(unioned, cityFeatures[i]);
+            }
+            window.cityBoundariesCache[communeName] = unioned;
+            source.setData(unioned);
+        } else if (cityFeatures.length > 0) {
+            source.setData(cityFeatures[0]);
+        }
+    } catch (e) {
+        console.warn("Union failed", e);
+    }
 };
 
 function deselectFeature() {
-    if (window.selectedLayer) {
-        const prev = window.selectedLayer;
-        window.selectedLayer = null; // Clear state FIRST so style() returns 'not selected'
-
-        prev.setStyle({
-            stroke: false,
-            weight: 0,
-            fillOpacity: 0.55,
-            color: 'transparent'
-        });
-        prev.setStyle(style(prev.feature));
-
+    if (window.selectedFeatureId) {
+        window.selectedFeatureId = null;
+        
         if (window.walkingPathsGroup) window.walkingPathsGroup.clearLayers();
+        if (window.communeHighlightLayer) window.communeHighlightLayer.clearLayers();
+        
         info.update();
         if (window.renderActiveLayers) window.renderActiveLayers();
 
         // Unlock de-zoom
-        map.setMinZoom(9);
-
-        // Simplified deselect: stay where we are or gentle zoom out if too close
+// map.setMinZoom(0);
+        
         if (map.getZoom() > 14) {
-            map.setZoom(13.5, { animate: true });
+            map.easeTo({ zoom: 13.5, duration: 800 });
         }
     }
-
-    if (centroidMarker) {
-        map.removeLayer(centroidMarker);
-        centroidMarker = null;
-    }
-    if (window.communeHighlightLayer) window.communeHighlightLayer.clearLayers();
-    if (window.proximityLayer) window.proximityLayer.clearLayers();
-    window.proximityCircle = null;
-    window.activeCommuneName = null;
-    window.activeCommuneCodes = [];
-    if (window.updateTopMatches) window.updateTopMatches();
 }
 window.deselectFeature = deselectFeature;
 
@@ -4274,18 +4116,10 @@ async function initApp() {
             // Legacy support for has_metro calculation below
             window.metroStationsData = (window.allStationsData || []).filter(s => s.mode === "METRO");
 
-            window.transitLinesLayer = L.geoJSON(transitData, {
-                style: function (feature) {
-                    const color = feature.properties.route_color ? `#${feature.properties.route_color}` : (idfmColors[feature.properties.route_short_name]?.bg || '#3388ff');
-                    return {
-                        color: color,
-                        weight: 4,
-                        opacity: 0.8
-                    };
-                },
-                pane: 'transitLinesPane',
-                renderer: window.transitRenderer
-            });
+            // Transit lines are now handled via the 'paths' source in MapLibre
+            if (map.getSource('paths')) {
+                // Initial data if needed, but usually handled by updateContextualMap
+            }
         } catch (e) {
             console.error("❌ Data Fetch Error (Phase 1):", e);
             throw e;
@@ -4386,18 +4220,6 @@ async function initApp() {
             }
         };
 
-        // Clear existing GeoJSON layer correctly
-        if (window.geojsonLayer) {
-            map.removeLayer(window.geojsonLayer);
-            window.geojsonLayer = null;
-        }
-
-        // Aggressively clear ALL other GeoJSON layers to avoid duplicates
-        map.eachLayer(l => {
-            if (l instanceof L.GeoJSON && l !== osmPathsLayer && l !== qpvLayer && l !== window.gpeLinesLayer && l !== window.espacesVertsLayer && l !== window.pebLayer) {
-                map.removeLayer(l);
-            }
-        });
 
         window.allNeighborhoods = (geojsonData?.features || []).map(f => {
             const p = f.properties || {};
@@ -4405,51 +4227,115 @@ async function initApp() {
             p.nom = p.nom || p.NOM || "Quartier inconnu";
             p.code = String(p.code || p.CODE || f.id || "");
             p.commune = getCommuneName(p, p.code);
+            // Initialize memoization object
+            p.memo = { cacheKey: null, matchData: null };
             return f;
         });
 
-        // Precompute metro proximity for all neighborhoods
+        // Precompute all heavy data once
+        console.log("🧬 Pre-calculating neighborhood data...");
+        
+        // PRE-CALCULATE CITY CENTERS (Expensive spatial logic moved here)
+        if (window.cityCentersData) {
+            window.cityCentersData.features.forEach(f => {
+                if (typeof turf === 'undefined') return;
+                const centroid = turf.centroid(f).geometry.coordinates;
+                const localPoints = getNearbyPoints({ lat: centroid[1], lon: centroid[0] }, 500);
+                f.properties.precomputedAmenities = {
+                    bio: localPoints.commerces.some(c => c.properties.category === 'bio'),
+                    bakery: localPoints.commerces.some(c => (c.properties.category || '').match(/bakery|boulangerie/i)),
+                    supermarket: localPoints.commerces.some(c => (c.properties.category || '').match(/supermarket|supermarché|alimentation|epicerie/i)),
+                    pharmacy: localPoints.amenities.some(c => c.properties.category === 'pharmacy'),
+                    bank: localPoints.amenities.some(c => c.properties.category === 'bank'),
+                    culture: localPoints.culture.length > 0 || localPoints.amenities.some(c => (c.properties.category || '').match(/cinema|theater|museum|theatre/i)),
+                    restaurant: localPoints.amenities.some(c => (c.properties.category || '').match(/restaurant|cafe|bar/i)) || localPoints.commerces.some(c => (c.properties.category || '').match(/restau/i))
+                };
+            });
+        }
+
         window.allNeighborhoods.forEach(f => {
             const p = f.properties;
             if (p.lat && p.lon) {
                 p.has_metro = (window.metroStationsData && window.metroStationsData.some(s => getDistance(p.lat, p.lon, s.lat, s.lon) <= 800));
+                
+                // PRE-CALCULATE IS_IN_POLE (Turf check done ONCE)
+                if (window.cityCentersData && typeof turf !== 'undefined') {
+                    const point = turf.point([p.lon, p.lat]);
+                    p.is_in_pole = window.cityCentersData.features.some(cf => turf.booleanPointInPolygon(point, cf));
+                } else {
+                    p.is_in_pole = false;
+                }
             }
         });
 
-        geojsonLayer = L.geoJSON(geojsonData, {
-            style: style,
-            onEachFeature: onEachFeature,
-            pane: 'neighborhoods',
-            renderer: window.neighborhoodsRenderer
-        }).addTo(map);
-        window.geojsonLayer = geojsonLayer;
+        // Enrich GeoJSON properties with Price and Demo data before MapLibre Upload
+        if (geojsonData && geojsonData.features) {
+            geojsonData.features.forEach(f => {
+                const props = f.properties;
+                const id = f.id || props.code;
+                if (!id) return;
+
+                const data = idfPrices[id] || { all: { price: 5000, vol: 0 }, pav: 0, ips: 0 };
+                Object.assign(props, {
+                    all: data.all,
+                    apt: data.apt,
+                    house: data.house,
+                    pav: data.pav,
+                    evolution_apt: data.evolution_apt,
+                    evolution_house: data.evolution_house,
+                    ips: data.ips,
+                    demo: data.demo || props.demo // Keep existing if present
+                });
+            });
+        }
+
+        console.log("✅ Pre-calculation & Data enrichment complete.");
+
+        // Pushing data to MapLibre
+        if (map.getSource('neighborhoods')) {
+            // Pre-calculate colors for the initial view
+            geojsonData.features.forEach(f => {
+                try {
+                    const score = calculateMatchRate(f.properties).total;
+                    f.properties.fillColor = getColor(score);
+                } catch (e) {
+                    f.properties.fillColor = '#ccc';
+                }
+            });
+            map.getSource('neighborhoods').setData(geojsonData);
+        }
+        window.geojsonLayer = { 
+            eachLayer: (cb) => {
+                // Compatibility shim: loop over allNeighborhoods instead of Leaflet layers
+                window.allNeighborhoods.forEach(f => cb({ feature: f, setStyle: () => {} }));
+            }
+        };
         buildSearchIndex(geojsonData);
         refreshMobilityCache(geojsonData);
 
-        // Prevent map clicks when interacting with the left panel
         const uiPanel = document.getElementById('ui-panel');
         if (uiPanel) {
-            L.DomEvent.disableClickPropagation(uiPanel);
-            L.DomEvent.disableScrollPropagation(uiPanel);
+            uiPanel.addEventListener('mousedown', e => e.stopPropagation());
+            uiPanel.addEventListener('wheel', e => e.stopPropagation());
         }
 
         // Stations & Schools
 
         // Setup
-        window.stationsLayer = L.layerGroup();
-        window.schoolsLayer = L.layerGroup();
-        window.commercesLayer = L.layerGroup();
-        window.amenitiesLayer = L.layerGroup();
-        window.sportLayer = L.layerGroup();
-        window.cultureLayer = L.layerGroup();
-        window.pediatresLayer = L.layerGroup();
-        window.marcheLayer = L.layerGroup();
-        window.gpeLayer = L.layerGroup();
-        window.mairiesLayer = L.layerGroup();
-        window.rivieraLayer = L.layerGroup();
-        window.centreVilleLayer = L.layerGroup().addTo(map);
-        window.communeHighlightLayer = L.layerGroup().addTo(map);
-        window.commerceHighlightLayer = L.layerGroup().addTo(window.map);
+        window.stationsLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.schoolsLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.commercesLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.amenitiesLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.sportLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.cultureLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.pediatresLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.marcheLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.gpeLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.mairiesLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.rivieraLayer = { clearLayers: () => {}, addLayer: () => {} };
+        window.centreVilleLayer = { clearLayers: () => {}, addLayer: () => {}, addTo: () => {} };
+        window.communeHighlightLayer = { clearLayers: () => {}, addLayer: () => {}, addTo: () => {} };
+        window.commerceHighlightLayer = { clearLayers: () => {}, addLayer: () => {}, addTo: () => {} };
 
         window.gpePointToLayer = (s, latlng) => {
             const primaryLine = s.lines[0];
@@ -4789,7 +4675,6 @@ async function initApp() {
     }
 }
 
-initApp();
 
 let zoomTimeout;
 let filterTimeout;
@@ -4805,6 +4690,35 @@ function updateFilters() {
 function _updateFilters() {
     if (!window.geojsonLayer) return;
     console.log("⚡ Refreshing map filters...");
+
+    // UPDATE GLOBAL CONTEXT (Once per filter change, not once per IRIS!)
+    const budgetRaw = document.getElementById('budget-input')?.value || "850000";
+    window.appContext.budget = parseInt(String(budgetRaw).replace(/\s/g, '').replace(/[^0-9]/g, '')) || 850000;
+    
+    window.appContext.surfaceBucket = document.getElementById('surface-input')?.value || "60-80m2";
+    const bucketValues = {
+        "<30m2": 20, "30-40m2": 35, "40-60m2": 50, "60-80m2": 70, "80-100m2": 90, "100-120m2": 110, "120m2+": 140
+    };
+    window.appContext.minSurface = bucketValues[window.appContext.surfaceBucket] || 70;
+    window.appContext.propertyType = window.currentPropertyType || 'all';
+    window.appContext.searchCriteria = window.searchCriteria || [];
+    window.appContext.activeAxisId = window.activeAxisId;
+
+    // PRE-FETCH ACTIVE PREFERENCES (Avoid DOM reads in loop)
+    window.appContext.preferences = {};
+    ['immo', 'mobility', 'commute', 'urbanisme', 'vieQuartier', 'family', 'infra', 'safety', 'socio', 'demo'].forEach(id => {
+        const activeChip = document.getElementById('pref-' + id)?.querySelector('.pref-chip.active');
+        if (activeChip) window.appContext.preferences[id] = activeChip.getAttribute('data-value');
+    });
+
+    // GENERATE UNIQUE CACHE KEY
+    window.globalCacheKey = [
+        window.appContext.budget,
+        window.appContext.surfaceBucket,
+        window.appContext.propertyType,
+        JSON.stringify(window.appContext.searchCriteria),
+        window.appContext.activeAxisId
+    ].join('|');
 
     // Sync activeWorkplaces with Criteria Builder 'commute' criteria
     if (window.searchCriteria) {
@@ -4887,11 +4801,7 @@ window.updateNoiseVisibility = async () => {
         noiseInfraLayerBase.addLayer(layer);
     }
 
-    if (show && noiseInfraLayerBase && !window.map.hasLayer(noiseInfraLayerBase)) {
-        window.map.addLayer(noiseInfraLayerBase);
-    } else if (!show && noiseInfraLayerBase && window.map.hasLayer(noiseInfraLayerBase)) {
-        window.map.removeLayer(noiseInfraLayerBase);
-    }
+    // MapLibre noise infra visibility handled elsewhere or disabled for now
 };
 
 window.updateAirQualityVisibility = () => {
@@ -4909,7 +4819,7 @@ window.updateMairiesVisibility = () => {
 window.updatePEBVisibility = async () => {
     const show = document.getElementById('show-peb')?.checked;
     if (!show) {
-        if (window.pebLayer) window.map.removeLayer(window.pebLayer);
+        // PEB layer visibility removal
         return;
     }
 
@@ -4928,12 +4838,12 @@ window.updatePEBVisibility = async () => {
                     renderer: window.pebRenderer
                 },
                 pane: 'noisePane'
-            }).addTo(window.pebLayer);
+            });
         });
     }
 
     if (window.pebLayer && !window.map.hasLayer(window.pebLayer)) {
-        window.pebLayer.addTo(window.map);
+        // window.pebLayer.addTo(window.map);
     }
 };
 
@@ -4941,24 +4851,14 @@ window.updateCentreVilleVisibility = async () => {
     const show = document.getElementById('show-centre-ville')?.checked;
     const legend = document.getElementById('city-centers-legend');
 
-    if (!window.centreVilleLayer) {
-        window.centreVilleLayer = L.layerGroup().addTo(window.map);
-    }
-    window.centreVilleLayer.clearLayers();
-    
-    // Always show legend if checked, regardless of walking paths
     if (legend) {
         if (show) legend.classList.remove('hidden');
         else legend.classList.add('hidden');
     }
     
-    if (!show) return;
+    if (!show || !window.map.getSource('city-centers')) return;
 
     const zoom = window.map.getZoom();
-    if (zoom < 11) return;
-    const bounds = window.map.getBounds();
-    const hasWalkingPaths = window.activeWalkingPaths && window.activeWalkingPaths.length > 0;
-
     const personaStyles = {
         "Pôle de Mobilité": { color: '#8b5cf6', icon: '🚉' },
         "Cœur Historique": { color: '#f59e0b', icon: '🏺' },
@@ -4967,93 +4867,39 @@ window.updateCentreVilleVisibility = async () => {
         "Pôle de Vie": { color: '#10b981', icon: '🌱' }
     };
 
-    (window.cityCentersData.features || []).forEach(feature => {
+    const features = [];
+    const auraFeatures = [];
+
+    (window.cityCentersData?.features || []).forEach(feature => {
         const props = feature.properties;
-        try {
-            const centroid = turf.centroid(feature).geometry.coordinates;
-            const latlng = [centroid[1], centroid[0]];
-            if (!bounds.contains(latlng)) return;
-
-            const s = personaStyles[props.persona] || personaStyles["Pôle de Vie"];
-
-            // ALWAYS show the perimeter (Essential Context)
-            if (zoom >= 12) {
-                L.geoJSON(feature, {
-                    pane: 'cityCentersPane',
-                    renderer: window.cityCentersRenderer,
-                    interactive: false,
-                    style: {
-                        color: s.color,
-                        weight: 2,
-                        opacity: 0.4,
-                        fillColor: s.color,
-                        fillOpacity: 0.05,
-                        dashArray: '6, 6'
-                    }
-                }).addTo(window.centreVilleLayer);
+        const centroid = turf.centroid(feature).geometry.coordinates;
+        const s = personaStyles[props.persona] || personaStyles["Pôle de Vie"];
+        
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: centroid },
+            properties: {
+                ...props,
+                icon: s.icon,
+                color: s.color
             }
+        });
 
-            // ONLY show the static marker if NO interactive walking paths are showing
-            if (!hasWalkingPaths) {
-                const marker = L.marker(latlng, {
-                    icon: L.divIcon({
-                        className: 'city-center-marker',
-                        html: `
-                            <div class="city-center-marker-container" style="position: relative;">
-                                <div class="center-main-icon" style="
-                                    background: white;
-                                    color: ${s.color};
-                                    width: 28px; height: 28px;
-                                    border-radius: 50%;
-                                    display: flex; align-items: center; justify-content: center;
-                                    font-size: 16px;
-                                    border: 2.5px solid ${s.color};
-                                    box-shadow: 0 3px 10px rgba(0,0,0,0.25);
-                                ">${s.icon}</div>
-                            </div>
-                        `,
-                        iconSize: [28, 28],
-                        iconAnchor: [14, 14]
-                    }),
-                    interactive: true,
-                    pane: 'cityCentersPane'
-                }).addTo(window.centreVilleLayer);
+        // Use actual Polygon for Aura
+        auraFeatures.push({
+            type: 'Feature',
+            geometry: feature.geometry,
+            properties: { color: s.color }
+        });
 
-                marker.bindPopup(`
-                    <div class="p-3">
-                        <div class="text-[10px] font-black uppercase tracking-widest mb-1" style="color: ${s.color}">${props.persona || 'Pôle de Vie'}</div>
-                        <div class="text-[15px] font-black text-gray-900 mb-1">${props.name}</div>
-                        <div class="text-[11px] text-gray-500 font-medium">${props.description || 'Centre d\'activité local'}</div>
-                    </div>
-                `, { maxWidth: 300 });
-
-                marker.on('mouseover', () => {
-                    const path = window.activeWalkingPaths?.find(p => p.name === props.name);
-                    if (path) window.highlightPath(path.id, true);
-                });
-                marker.on('mouseout', () => {
-                    const path = window.activeWalkingPaths?.find(p => p.name === props.name);
-                    if (path) window.highlightPath(path.id, false);
-                });
-
-                marker.on('click', (e) => {
-                    L.DomEvent.stopPropagation(e);
-                    const el = marker.getElement().querySelector('.city-center-marker-container');
-
-                    // On ferme les autres avant d'ouvrir celui-ci
-                    document.querySelectorAll('.city-center-marker-container.active').forEach(c => {
-                        if (c !== el) c.classList.remove('active');
-                    });
-
-                    el.classList.toggle('active');
-                });
-            }
-
-        } catch (e) {
-            console.warn("Erreur de rendu pour le pôle :", props.name, e);
-        }
     });
+
+    window.map.getSource('city-centers').setData({ type: 'FeatureCollection', features });
+    if (window.map.getSource('city-centers-aura')) {
+        window.map.getSource('city-centers-aura').setData({ type: 'FeatureCollection', features: auraFeatures });
+    }
 };
+
 
 window.updateBudgetDisplay = () => {
     const budget = parseInt(document.getElementById('budget-input').value);
@@ -5074,352 +4920,44 @@ window.updateBudgetDisplay = () => {
 
 window.renderActiveLayers = renderActiveLayers;
 function getVisibleInseeCodes() {
-    if (!window.map || !window.geojsonLayer) return [];
+    if (!window.map || !window.irisGrid) return [];
     const bounds = window.map.getBounds();
     const visible = new Set();
 
-    // Use bounds intersection for robust visibility detection
-    window.geojsonLayer.eachLayer(layer => {
-        if (bounds.intersects(layer.getBounds())) {
-            visible.add(layer.feature.properties.code || layer.feature.id);
+    // Use the spatial grid for ultra-fast visibility detection (O(1) vs O(N))
+    const nw = bounds.getNorthWest();
+    const se = bounds.getSouthEast();
+    
+    const minX = Math.floor(nw.lng * 50) - 1;
+    const maxX = Math.floor(se.lng * 50) + 1;
+    const minY = Math.floor(se.lat * 50) - 1;
+    const maxY = Math.floor(nw.lat * 50) + 1;
+
+    for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+            const cell = window.irisGrid[`${x},${y}`];
+            if (cell) cell.forEach(code => visible.add(code));
         }
-    });
+    }
 
     return Array.from(visible);
 }
 
-function renderActiveLayers(skipStyleRefresh = false) {
-    if (window.updateOSMContextVisibility) window.updateOSMContextVisibility();
-    if (!window.map || !window.prebuiltMarkers) return;
-
-    const zoom = window.map.getZoom();
-
-    // Zoom thresholds (more permissive if a city is selected)
-    const isActiveCity = window.activeCommuneCodes && window.activeCommuneCodes.length > 0;
-    const showBasePoints = zoom >= 13 || (isActiveCity && zoom >= 11);
-    const showDetailedPoints = zoom >= 15 || (isActiveCity && zoom >= 14.5);
-
-    // --- 1. Gestion des calques globaux (Lignes, Bruit, Espaces Verts...) ---
-    const showStations = document.getElementById('show-stations')?.checked;
-
-    if (showStations && window.transitLinesLayer) {
-        if (!window.map.hasLayer(window.transitLinesLayer)) window.transitLinesLayer.addTo(window.map);
-    } else if (window.transitLinesLayer) {
-        window.map.removeLayer(window.transitLinesLayer);
-    }
-
-    const showGPE = document.getElementById('show-gpe-lines')?.checked || false;
-    if (showGPE) {
-        if (window.gpeLinesLayer && !window.map.hasLayer(window.gpeLinesLayer)) window.gpeLinesLayer.addTo(window.map);
-    } else {
-        if (window.gpeLinesLayer) window.map.removeLayer(window.gpeLinesLayer);
-    }
-
-    const showEspacesVerts = document.getElementById('show-espaces-verts')?.checked || false;
-    if (showEspacesVerts && window.espacesVertsLayer) {
-        if (!window.map.hasLayer(window.espacesVertsLayer)) window.espacesVertsLayer.addTo(window.map);
-    } else if (window.espacesVertsLayer) {
-        window.map.removeLayer(window.espacesVertsLayer);
-    }
-
-    const showPEB = document.getElementById('show-peb')?.checked || false;
-    if (showPEB && window.updatePEBVisibility) {
-        window.updatePEBVisibility();
-    } else if (window.pebLayer) {
-        window.map.removeLayer(window.pebLayer);
-    }
-
-    // --- 2. Vider les LayerGroups (Ultra-rapide, détache juste les objets sans les détruire) ---
-    window.stationsLayer.clearLayers();
-    window.schoolsLayer.clearLayers();
-    window.commercesLayer.clearLayers();
-    window.amenitiesLayer.clearLayers();
-    window.sportLayer.clearLayers();
-    window.cultureLayer.clearLayers();
-    window.pediatresLayer.clearLayers();
-    window.marcheLayer.clearLayers();
-    window.mairiesLayer.clearLayers();
-    window.rivieraLayer.clearLayers();
-    window.gpeLayer.clearLayers();
-    
-    // Explicitly clear city centers if walking paths are active to avoid "ghost" markers
-    const hasWalkingPaths = window.activeWalkingPaths && window.activeWalkingPaths.length > 0;
-    if (hasWalkingPaths && window.centreVilleLayer) {
-        window.centreVilleLayer.clearLayers();
-    }
-
-    // Si on est trop dézoomé, on s'arrête là (sauf si une ville est sélectionnée)
-    if (zoom < 13 && !isActiveCity) { // <--- ICI on passe à 13
-        if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
-        
-        const hasWalkingPaths = window.activeWalkingPaths && window.activeWalkingPaths.length > 0;
-        if (window.updateCentreVilleVisibility) {
-            if (hasWalkingPaths) window.centreVilleLayer.clearLayers();
-            else window.updateCentreVilleVisibility();
-        }
-        if (window.updateWalkingLabelsZoom) window.updateWalkingLabelsZoom();
-
-        if (zoom < 10 && window.walkingPathsGroup) {
-            // Only clear at very low zoom to avoid flickering during transitions
-            window.walkingPathsGroup.clearLayers();
-        }
-        return;
-    }
-
-    // --- 3. Lecture de l'état de tous les filtres ---
-    const grpCommerces = document.getElementById('group-commerces')?.checked;
-    const showBoulangerie = document.getElementById('show-boulangerie')?.checked;
-    const showBoucherie = document.getElementById('show-boucherie')?.checked;
-    const showFromagerie = document.getElementById('show-fromagerie')?.checked;
-    const showSurgeles = document.getElementById('show-surgeles')?.checked;
-    const showBio = document.getElementById('show-bio')?.checked;
-    const showSupermarche = document.getElementById('show-supermarche')?.checked;
-    const showCommercesAutres = document.getElementById('show-commerces-autres')?.checked;
-    const showMarche = document.getElementById('show-marche')?.checked;
-
-    const grpSante = document.getElementById('group-sante')?.checked;
-    const showPharmacie = document.getElementById('show-pharmacie')?.checked;
-    const showPediatres = document.getElementById('show-pediatres')?.checked;
-
-    const grpSorties = document.getElementById('group-sorties')?.checked;
-    const showRestaurant = document.getElementById('show-restaurant')?.checked;
-    const showFastFood = document.getElementById('show-fast-food')?.checked;
-    const showBar = document.getElementById('show-bar')?.checked;
-    const showPub = document.getElementById('show-pub')?.checked;
-    const showCafe = document.getElementById('show-cafe')?.checked;
-
-    const grpInfra = document.getElementById('group-infra')?.checked;
-    const showSchools = document.getElementById('show-schools')?.checked;
-    const showCreches = document.getElementById('show-creches')?.checked;
-    const showSport = document.getElementById('show-sport')?.checked;
-    const showCulture = document.getElementById('show-culture')?.checked;
-    const showBiblios = document.getElementById('show-biblios')?.checked;
-    const showMairies = document.getElementById('show-mairies')?.checked;
-
-    // Gestion des légendes
-    const marketLegend = document.getElementById('market-legend');
-    if (marketLegend) {
-        if ((grpCommerces || showMarche) && showDetailedPoints) marketLegend.classList.remove('hidden');
-        else marketLegend.classList.add('hidden');
-    }
-
-    const schoolLegend = document.getElementById('school-legend');
-    if (schoolLegend) {
-        if (showSchools) schoolLegend.classList.remove('hidden');
-        else schoolLegend.classList.add('hidden');
-    }
-
-    const activeCommerces = [];
-    if (showBoulangerie) activeCommerces.push('boulangerie');
-    if (showBoucherie) activeCommerces.push('boucherie', 'butcher');
-    if (showFromagerie) activeCommerces.push('fromagerie', 'cheese');
-    if (showSurgeles) activeCommerces.push('picard', 'surgeles');
-    if (showBio) activeCommerces.push('bio', 'magasin bio');
-    if (showSupermarche) activeCommerces.push('supermarket', 'supermarche', 'supermarché');
-    if (showCommercesAutres) activeCommerces.push('commerces', 'autre', 'marche', 'caviste', 'poissonnerie', 'fleuriste', 'chocolatier', 'epicerie_fine', 'primeur', 'habillement', 'jouets', 'chaussures');
-    if (showPharmacie) activeCommerces.push('pharmacie');
-    if (showRestaurant) activeCommerces.push('restaurant');
-    if (showFastFood) activeCommerces.push('fast_food');
-    if (showCafe) activeCommerces.push('cafe');
-    if (showBar) activeCommerces.push('bar');
-    if (showPub) activeCommerces.push('pub');
-    if (showMarche) activeCommerces.push('marche');
-
-    const toggles = {
-        stations: showStations && showBasePoints,
-        schools: (grpInfra || showSchools) && showBasePoints,
-        commerces: (grpCommerces || grpSante || grpSorties || activeCommerces.length > 0) && showDetailedPoints,
-        amenities: (grpInfra || showCulture || showSport || showBiblios || showCreches) && showDetailedPoints,
-        pediatres: showPediatres && showDetailedPoints,
-        marche: (grpCommerces || showMarche || showCommercesAutres) && showDetailedPoints,
-        mairies: showMairies && showDetailedPoints,
-        riviera: document.getElementById('show-riviera')?.checked && showDetailedPoints,
-        gpe: showGPE
-    };
-
-    // --- 4. Boucle rapide sur le CACHE (window.prebuiltMarkers) ---
-    const visibleIds = window.visibleInseeCache && window.visibleInseeCache.length > 0 ? window.visibleInseeCache : getVisibleInseeCodes();
-
-    visibleIds.forEach(id => {
-        const irisMarkers = window.prebuiltMarkers[id];
-        if (!irisMarkers) return;
-
-        // Points simples
-        if (toggles.stations && irisMarkers.stations) {
-            const hasStationPaths = window.activeWalkingPaths?.some(p => p.type === 'station');
-            if (!hasStationPaths) {
-                irisMarkers.stations.forEach(m => window.stationsLayer.addLayer(m));
-            }
-        }
-        if (toggles.schools && irisMarkers.schools) {
-            const hasSchoolPaths = window.activeWalkingPaths?.some(p => p.type === 'school');
-            if (!hasSchoolPaths) {
-                irisMarkers.schools.forEach(m => window.schoolsLayer.addLayer(m));
-            }
-        }
-        if (toggles.marche && irisMarkers.marche) {
-            irisMarkers.marche.forEach(m => {
-                if (m._isInPole) return;
-                window.marcheLayer.addLayer(m);
-            });
-        }
-        if (toggles.riviera && irisMarkers.riviera) irisMarkers.riviera.forEach(m => window.rivieraLayer.addLayer(m));
-        if (toggles.pediatres && irisMarkers.pediatres) irisMarkers.pediatres.forEach(m => window.pediatresLayer.addLayer(m));
-
-        // Commerces (Filtrage ultra-rapide en mémoire)
-        if (toggles.commerces && irisMarkers.commerces) {
-            irisMarkers.commerces.forEach(m => {
-                let allowed = false;
-                const cat = m._featureCategory;
-                const isBioProp = m._isBio;
-                const isPicardProp = m._isPicard;
-
-                // Mode "Tout afficher" (Groupes cochés)
-                if (grpCommerces && ['boulangerie', 'boucherie', 'butcher', 'fromagerie', 'cheese', 'picard', 'surgeles', 'bio', 'magasin bio', 'supermarket', 'supermarche', 'supermarché', 'marche', 'caviste', 'commerces', 'cafe', 'poissonnerie', 'fleuriste', 'chocolatier', 'epicerie_fine'].includes(cat)) allowed = true;
-                if (grpCommerces && isBioProp) allowed = true;
-                if (grpCommerces && isPicardProp) allowed = true;
-                if (grpSante && cat === 'pharmacie') allowed = true;
-                if (grpSorties && ['restaurant', 'fast_food', 'bar', 'pub'].includes(cat)) allowed = true;
-
-                // Mode Individuel
-                if (!allowed && activeCommerces.length > 0) {
-                    if (activeCommerces.includes(cat)) allowed = true;
-                    if (activeCommerces.includes('bio') && isBioProp) allowed = true;
-                    if (activeCommerces.includes('picard') && isPicardProp) allowed = true;
-                }
-
-                if (allowed && m._isInPole) {
-                    allowed = false;
-                }
-
-                if (allowed) window.commercesLayer.addLayer(m);
-            });
-        }
-
-        // Amenities / Culture / Sport
-        if (toggles.amenities) {
-            const filterAmenity = (m) => {
-                const cat = m._featureCategory;
-                const type = m._featureType;
-                let allowed = false;
-                if (grpInfra) allowed = true;
-                if (showCulture && ['cinema', 'theatre', 'institution_culturelle'].includes(cat)) allowed = true;
-                if (showSport && ['tennis', 'swimming_pool', 'sport', 'stadium', 'gym', 'piscine', 'musique'].includes(cat)) allowed = true;
-                if (showBiblios && ['bibliotheque', 'library', 'mediatheque'].includes(cat)) allowed = true;
-                if (showCreches && (cat === 'creche' || type === 'creche')) allowed = true;
-                return allowed;
-            };
-
-            if (irisMarkers.amenities) irisMarkers.amenities.forEach(m => { if (filterAmenity(m) && !m._isInPole) window.amenitiesLayer.addLayer(m); });
-            if (irisMarkers.sport) irisMarkers.sport.forEach(m => { if (filterAmenity(m) && !m._isInPole) window.sportLayer.addLayer(m); });
-            if (irisMarkers.culture) irisMarkers.culture.forEach(m => { if (filterAmenity(m) && !m._isInPole) window.cultureLayer.addLayer(m); });
-        }
-
-        // Fallback Pédiatres si non présents dans prebuiltMarkers mais présents dans pediatresIndex
-        if (toggles.pediatres && (!irisMarkers.pediatres || irisMarkers.pediatres.length === 0) && window.pediatresIndex?.[id]) {
-            window.pediatresIndex[id].forEach(f => {
-                const latlng = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
-                const m = window.pediatrePointToLayer(f, latlng);
-                if (m) window.pediatresLayer.addLayer(m);
-            });
-        }
-    });
-
-    // --- 5. Données "Globales" (Calculées uniquement si dans le viewport) ---
-    if (toggles.mairies && window.mairiesData) {
-        const bounds = window.map.getBounds();
-        window.mairiesData.features.forEach(f => {
-            const latlng = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
-            if (bounds.contains(latlng)) {
-                const m = window.mairiePointToLayer(f, latlng);
-                if (m) window.mairiesLayer.addLayer(m);
-            }
-        });
-    }
-
-    if (toggles.gpe && window.gpeStationsData) {
-        const bounds = window.map.getBounds();
-        window.gpeStationsData.forEach(s => {
-            const latlng = [s.lat, s.lon];
-            if (bounds.contains(latlng)) {
-                const m = window.gpePointToLayer(s, latlng);
-                if (m) window.gpeLayer.addLayer(m);
-            }
-        });
-    }
-
-    // --- 6. Ajouter / Retirer les LayerGroups de la carte ---
-    const layersMap = [
-        { toggle: toggles.stations, layer: window.stationsLayer },
-        { toggle: toggles.schools, layer: window.schoolsLayer },
-        { toggle: toggles.commerces, layer: window.commercesLayer },
-        { toggle: toggles.amenities, layer: window.amenitiesLayer },
-        { toggle: toggles.amenities, layer: window.sportLayer },
-        { toggle: toggles.amenities, layer: window.cultureLayer },
-        { toggle: toggles.pediatres, layer: window.pediatresLayer },
-        { toggle: toggles.marche, layer: window.marcheLayer },
-        { toggle: toggles.riviera, layer: window.rivieraLayer },
-        { toggle: toggles.mairies, layer: window.mairiesLayer },
-        { toggle: toggles.gpe, layer: window.gpeLayer }
-    ];
-
-    layersMap.forEach(({ toggle, layer }) => {
-        if (toggle && !window.map.hasLayer(layer)) {
-            window.map.addLayer(layer);
-        } else if (!toggle && window.map.hasLayer(layer)) {
-            window.map.removeLayer(layer);
-        }
-    });
-
-    // Appels annexes habituels
-    if (window.updateTransactionsVisibility) window.updateTransactionsVisibility();
-    if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
-    if (window.updateWalkingLabelsZoom) window.updateWalkingLabelsZoom();
-
-    // Rafraichir le style des IRIS (important pour le zoom check du stroke blanc)
-    if (window.geojsonLayer && !skipStyleRefresh) {
-        window.geojsonLayer.setStyle(style);
-    }
-}
-
-window.transactionLayer = L.markerClusterGroup({
-    maxClusterRadius: 40,
-    clusterPane: 'poiPane',
-    iconCreateFunction: function (cluster) {
-        return L.divIcon({
-            html: `<div class="bg-green-600 text-white rounded-full w-8 h-8 flex items-center justify-center border-2 border-white shadow-lg text-[10px] font-bold">${cluster.getChildCount()}</div>`,
-            className: 'custom-cluster',
-            iconSize: [32, 32]
-        });
-    }
-}).addTo(window.map);
-
 window.updateTransactionsVisibility = function () {
-    if (!window.transactionLayer || !window.bakedTransactions || !window.map) return;
+    if (!window.bakedTransactions || !window.map || !window.map.getSource('transactions')) return;
 
     const isChecked = document.getElementById('show-transactions')?.checked;
     if (!isChecked) {
-        window.transactionLayer.clearLayers();
+        window.map.getSource('transactions').setData({ type: 'FeatureCollection', features: [] });
+        window.map.setLayoutProperty('transactions-layer', 'visibility', 'none');
         return;
     }
-
-    const zoom = window.map.getZoom();
-    if (zoom < 12) {
-        window.transactionLayer.clearLayers();
-        return; // Only show transactions when zoomed in (12 is reasonable)
-    }
-
-    window.transactionLayer.clearLayers();
 
     const budget = parseInt(document.getElementById('budget-input')?.value || 2000000);
     const currentType = window.currentPropertyType || 'all';
 
-    const visibleIds = getVisibleInseeCodes();
-
-    visibleIds.forEach(id => {
-        const d = window.bakedTransactions[id];
-        if (!d) return;
-
+    const features = [];
+    Object.entries(window.bakedTransactions).forEach(([id, d]) => {
         let list = [];
         if (currentType === 'all') {
             list = [...(d.house || []), ...(d.apt || [])];
@@ -5430,38 +4968,74 @@ window.updateTransactionsVisibility = function () {
         }
 
         list.forEach(t => {
-            if (t.price > budget * 1.1) return; // Allow 10% margin for budget
-
-            const isMatch = t.price <= budget;
-            const marker = L.marker([t.lat, t.lng], {
-                icon: L.divIcon({
-                    html: `<div class="w-7 h-7 rounded-full flex items-center justify-center text-sm shadow-xl border-2 transition-transform transform hover:scale-110
-                           ${isMatch ? 'bg-green-500 border-white text-white' : 'bg-[#0f172a] border-white text-white'}">
-                        ${t.type === 'Maison' ? '🏠' : '🏢'}
-                    </div>`,
-                    className: '',
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 14]
-                }),
-                pane: 'poiPane'
+            if (t.price > budget * 1.1) return;
+            features.push({
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [t.lng, t.lat] },
+                properties: {
+                    ...t,
+                    isMatch: t.price <= budget
+                }
             });
-
-            marker.bindPopup(`<div class="p-4 font-sans">
-                <div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">${t.type} • ${t.date}</div>
-                <div class="text-xl font-black text-[#0f172a]">${new Intl.NumberFormat('fr-FR').format(t.price)} €</div>
-                <div class="text-sm font-bold text-blue-600 mb-2">${t.sqm} m² • ${Math.round(t.price / t.sqm)} €/m²</div>
-                <div class="text-[11px] text-gray-500 border-t border-gray-100 pt-2 font-medium mb-3">${t.addr || 'Adresse non répertoriée'}</div>
-                <a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${t.lat},${t.lng}" target="_blank" 
-                   class="flex items-center justify-center gap-1.5 w-full py-1.5 bg-gray-50 hover:bg-blue-50 text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-200 rounded-lg text-[9px] font-bold transition-all uppercase tracking-tight">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                    Street View
-                </a>
-            </div>`);
-
-            window.transactionLayer.addLayer(marker);
         });
     });
+
+    window.map.getSource('transactions').setData({ type: 'FeatureCollection', features });
+    const transVis = isChecked ? 'visible' : 'none';
+    window.map.setLayoutProperty('transactions-bg', 'visibility', transVis);
+    window.map.setLayoutProperty('transactions-icon', 'visibility', transVis);
 };
+
+function renderActiveLayers() {
+    if (!window.map) return;
+    const zoom = map.getZoom();
+    const getChecked = (id) => document.getElementById(id)?.checked || false;
+
+    // Toggle Station Layer
+    const showStations = getChecked('show-stations');
+    const stationVis = (showStations && zoom >= 11) ? 'visible' : 'none';
+    
+    // Toggle native layers
+    map.setLayoutProperty('stations-bg', 'visibility', stationVis);
+    map.setLayoutProperty('stations-icon', 'visibility', stationVis);
+    window.renderPremiumMarkers('stations');
+
+    // Toggle School Layer
+    const schoolChecked = getChecked('show-schools');
+    const schoolVis = (schoolChecked && zoom >= 11) ? 'visible' : 'none';
+    map.setLayoutProperty('schools-bg', 'visibility', schoolVis);
+    map.setLayoutProperty('schools-icon', 'visibility', schoolVis);
+    window.renderPremiumMarkers('schools');
+
+    // Toggle City Center Auras
+    const showCentreVille = getChecked('show-centre-ville');
+    if (map.getLayer('city-centers-aura')) {
+        map.setLayoutProperty('city-centers-aura', 'visibility', showCentreVille ? 'visible' : 'none');
+    }
+    window.renderPremiumMarkers('cityCenters');
+
+
+    // Toggle Commerce Layer
+    const showCommerces = getChecked('group-commerces');
+    if (map.getSource('commerces')) {
+        map.setLayoutProperty('commerces-layer', 'visibility', (showCommerces && zoom >= 13) ? 'visible' : 'none');
+    }
+
+    // Toggle Walking Paths
+    const showCommute = getChecked('group-commute');
+    const pathVis = showCommute ? 'visible' : 'none';
+    ['walking-paths-outline', 'walking-paths-solid', 'walking-paths-dashed', 'walking-paths-badges'].forEach(lyr => {
+        if (map.getLayer(lyr)) map.setLayoutProperty(lyr, 'visibility', pathVis);
+    });
+}
+
+
+// Add map events for premium markers
+if (window.map) {
+    window.map.on('zoomend', () => renderActiveLayers());
+    window.map.on('moveend', () => renderActiveLayers());
+}
+
 
 window.renderActiveLayers = renderActiveLayers;
 window.updateStationsVisibility = renderActiveLayers;
@@ -5503,7 +5077,15 @@ window.toggleGroup = function (groupId, isChecked) {
         if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
         if (window.toggleSatelliteView) window.toggleSatelliteView(isChecked);
     }
+    else if (groupId === 'commute') {
+        window.renderWalkingPaths();
+        window.renderActiveLayers();
+    }
+    else if (groupId === 'demo') {
+        window.renderActiveLayers();
+    }
 };
+
 
 window.updateChildState = function (groupId) {
     const parent = document.getElementById(`group-${groupId}`);
@@ -5579,10 +5161,10 @@ window.showTransactions = (insee) => {
                 ${isMatch ? '<div class="absolute top-0 right-0 bg-green-500 text-white text-[7px] font-bold px-1.5 py-0.5 rounded-bl-lg uppercase tracking-tighter shadow-sm">Match</div>' : ''}
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-full ${isMaison ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'} flex items-center justify-center text-lg">
-                        ${isMaison ? '🏠' : '🏢'}
+                        ${isMaison ? '🏠' : ''}
                     </div>
                     <div>
-                        <div class="text-[11px] font-bold text-gray-900">${t.type} • ${t.rooms}p • ${t.sqm} m²</div>
+                        <div class="text-[11px] font-bold text-gray-900">${t.type} • ${t.rooms}p • ${t.sqm} m2</div>
                         <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((t.addr || '').replace('.0 ', ' '))}" target="_blank" class="text-[9px] text-blue-500 hover:underline font-medium mb-0.5 block">📍 ${(t.addr || '').replace('.0 ', ' ')}</a>
                         <div class="text-[9px] text-gray-400 font-semibold uppercase tracking-tight">${dateObj.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
                     </div>
@@ -5590,7 +5172,7 @@ window.showTransactions = (insee) => {
                 <div class="flex flex-col items-end gap-1.5">
                     <div class="text-right">
                         <div class="text-[12px] font-extrabold text-gray-900">${new Intl.NumberFormat('fr-FR').format(t.price)} €</div>
-                        <div class="text-[9px] font-bold ${isMatch ? 'text-green-600' : 'text-blue-600'}">${new Intl.NumberFormat('fr-FR').format(priceSqm)} €/m²</div>
+                        <div class="text-[9px] font-bold ${isMatch ? 'text-green-600' : 'text-blue-600'}">${new Intl.NumberFormat('fr-FR').format(priceSqm)} €/m2</div>
                     </div>
                     <a href="${svUrl}" target="_blank" class="flex items-center gap-1 px-1.5 py-0.5 bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-blue-600 border border-gray-200 rounded text-[8px] font-bold transition-all uppercase tracking-tighter">
                         <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
@@ -5642,7 +5224,7 @@ window.updateQPVVisibility = async () => {
                 return;
             }
         }
-        qpvLayer.addTo(map);
+        // qpvLayer removal logic
     } else if (qpvLayer) {
         map.removeLayer(qpvLayer);
     }
@@ -5684,7 +5266,7 @@ window.updateZSPVisibility = async () => {
                 return;
             }
         }
-        zspLayer.addTo(map);
+        // zspLayer removal logic
     } else if (zspLayer) {
         map.removeLayer(zspLayer);
     }
@@ -5896,7 +5478,7 @@ function getQuartierBadges(props) {
     const walkMeta = window.walkingMetadata?.[props.code];
     if (walkMeta && window.lastWalkingDuration) {
         const targetName = walkMeta.targetName || "";
-        let centerIcon = '🏢';
+        let centerIcon = '';
         let centerColor = 'bg-slate-50 text-slate-700';
 
         if (targetName.includes('Cœur Historique')) {
@@ -5986,7 +5568,7 @@ window.updateEspacesVertsVisibility = async () => {
         }
 
         if (window.espacesVertsLayer && !map.hasLayer(window.espacesVertsLayer)) {
-            window.espacesVertsLayer.addTo(map);
+            // espacesVertsLayer addition removed
         }
     } else {
         if (window.espacesVertsLayer && map.hasLayer(window.espacesVertsLayer)) {
@@ -6048,7 +5630,7 @@ window.updateOSMContextVisibility = async () => {
         }
 
         if (window.osmContextLayer && !map.hasLayer(window.osmContextLayer)) {
-            window.osmContextLayer.addTo(map);
+            // osmContextLayer addition removed
         }
     } else {
         if (window.osmContextLayer && map.hasLayer(window.osmContextLayer)) {
@@ -6136,9 +5718,7 @@ window.updatePathsVisibility = async () => {
         });
 
         osmPathsLayer.addData(filteredFeatures);
-        if (!map.hasLayer(osmPathsLayer)) map.addLayer(osmPathsLayer);
-    } else {
-        if (osmPathsLayer) map.removeLayer(osmPathsLayer);
+        // osmPathsLayer addition removal
     }
 };
 
@@ -6207,9 +5787,7 @@ window.updateVIFVisibility = async () => {
             });
         }
 
-        if (!map.hasLayer(vifLayer)) map.addLayer(vifLayer);
-    } else {
-        if (vifLayer) map.removeLayer(vifLayer);
+        // vifLayer addition removal
     }
 };
 
@@ -6245,7 +5823,7 @@ window.updateGPELinesVisibility = async () => {
         }
 
         if (!map.hasLayer(window.gpeLinesLayer)) {
-            window.gpeLinesLayer.addTo(map);
+            // gpeLinesLayer addition removed
         }
     } else {
         if (window.gpeLinesLayer && map.hasLayer(window.gpeLinesLayer)) {
@@ -6265,9 +5843,10 @@ function updateTopMatches() {
         const insee = f.properties.code || f.id;
         const matchData = calculateMatchRate(f.properties);
         const score = matchData.total;
-        const isVisible = isIrisVisible(insee, score, matchData, f.properties);
+        const isVisible = matchData.isVisible;
 
         if (score >= 0 && isVisible) {
+            f.properties.fillColor = getColor(score);
             validIris.push({
                 feature: f,
                 score: score,
@@ -6276,8 +5855,15 @@ function updateTopMatches() {
                 communeName: getCommuneName(f.properties),
                 code: insee
             });
+        } else {
+            f.properties.fillColor = 'transparent';
         }
     });
+
+    // Refresh MapLibre colors
+    if (window.map && window.map.getSource('neighborhoods')) {
+        window.map.getSource('neighborhoods').setData({ type: 'FeatureCollection', features: window.allNeighborhoods });
+    }
 
     const sortedIris = validIris.sort((a, b) => b.score - a.score);
 
@@ -6295,7 +5881,7 @@ function updateTopMatches() {
     if (window._lastIrisSignature === irisSignature) return;
     window._lastIrisSignature = irisSignature;
     // Only show ranking if no IRIS is selected
-    const isIrisSelected = !!window.selectedLayer;
+    const isIrisSelected = !!window.selectedFeatureId;
     if (content) {
         if (isIrisSelected) {
             content.classList.add('view-hidden');
@@ -6365,78 +5951,7 @@ function updateTopMatches() {
     }
 }
 
-window.drawCityBoundaries = function (communeName) {
-    if (!window.communeHighlightLayer) return;
-    window.communeHighlightLayer.clearLayers();
-
-    // Find codes from search index or directly from map features
-    const communeInfo = window.searchIndex ? window.searchIndex.communes.find(c => c.name === communeName) : null;
-
-    if (communeInfo) {
-        window.activeCommuneCodes = communeInfo.codes.map(String);
-    } else {
-        // Fallback: collect codes from the map itself
-        const codes = new Set();
-        if (window.allNeighborhoods) {
-            window.allNeighborhoods.forEach(f => {
-                if (getCommuneName(f.properties, f.id || f.properties.code) === communeName) {
-                    codes.add(String(f.properties.code || f.id));
-                }
-            });
-        }
-        window.activeCommuneCodes = Array.from(codes);
-    }
-
-    window.activeCommuneName = communeName;
-
-    // Refresh coloring of all neighborhoods
-    if (window.geojsonLayer) window.geojsonLayer.setStyle(style);
-
-    // DRAW CITY BOUNDARY
-    try {
-        const cityFeatures = [];
-        if (window.allNeighborhoods) {
-            window.allNeighborhoods.forEach(f => {
-                if (getCommuneName(f.properties, f.id || f.properties.code) === communeName) {
-                    cityFeatures.push(f);
-                }
-            });
-        }
-
-        if (cityFeatures.length > 0 && typeof turf !== 'undefined') {
-            let unioned = cityFeatures[0];
-            for (let i = 1; i < cityFeatures.length; i++) {
-                unioned = turf.union(unioned, cityFeatures[i]);
-            }
-
-            if (unioned) {
-                L.geoJSON(unioned, {
-                    style: {
-                        color: '#94a3b8',
-                        weight: 1,
-                        dashArray: '4, 6',
-                        fill: false,
-                        opacity: 0.6,
-                        interactive: false
-                    }
-                }).addTo(window.communeHighlightLayer);
-            }
-        }
-    } catch (e) {
-        console.warn("Could not draw city boundaries:", e);
-    }
-
-    // Show City Badge
-    const badge = document.getElementById('city-badge');
-    const badgeName = document.getElementById('city-badge-name');
-    if (badge && badgeName) {
-        badgeName.innerText = communeName;
-        badge.classList.remove('hidden');
-    }
-
-    // Refresh city centers for the new city
-    if (window.updateCentreVilleVisibility) window.updateCentreVilleVisibility();
-};
+// Removed redundant drawCityBoundaries
 
 window.selectCity = function (communeName) {
     if (!window.geojsonLayer) return;
@@ -6509,10 +6024,9 @@ window.selectNeighborhoodByCode = function (code) {
     if (!geojsonLayer) return;
     geojsonLayer.eachLayer(layer => {
         if (layer.feature.properties.code === code) {
-            map.flyTo(layer.getBounds().getCenter(), 15);
-            setTimeout(() => {
-                layer.fire('click');
-            }, 500);
+            // Directly trigger click/selection which handles its own flyToBounds
+            // This avoids the "double zoom" conflict
+            layer.fire('click');
         }
     });
 };
@@ -6564,7 +6078,7 @@ window.openComparison = function () {
                         <div class="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div class="h-full bg-emerald-500" style="width: ${m.categories.immo?.score || 0}%"></div>
                         </div>
-                        <div class="mt-2 text-[10px] text-gray-500 font-medium italic">${m.categories.immo?.details?.price || ''} €/m² est.</div>
+                        <div class="mt-2 text-[10px] text-gray-500 font-medium italic">${m.categories.immo?.details?.price || ''} €/m2 est.</div>
                         <div class="mt-4">
                             ${window.renderSparkline(p.evolution)}
                         </div>
@@ -6650,9 +6164,12 @@ window.renderSparkline = function (data) {
 };
 
 window.renderHistoricalTrend = function (houseData, aptData) {
-    if ((!houseData || houseData.length < 2) && (!aptData || aptData.length < 2)) return '';
+    const hData = Array.isArray(houseData) ? houseData : [];
+    const aData = Array.isArray(aptData) ? aptData : [];
 
-    const allData = [...(houseData || []), ...(aptData || [])].filter(v => v !== null && !isNaN(v));
+    if (hData.length < 2 && aData.length < 2) return '';
+
+    const allData = [...hData, ...aData].filter(v => v !== null && !isNaN(v));
     if (allData.length === 0) return '';
 
     const min = Math.min(...allData);
@@ -6666,23 +6183,23 @@ window.renderHistoricalTrend = function (houseData, aptData) {
         return data.map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * height}`).join(' ');
     };
 
-    const housePoints = getPoints(houseData);
-    const aptPoints = getPoints(aptData);
+    const housePoints = getPoints(hData);
+    const aptPoints = getPoints(aData);
 
-    const houseTrend = houseData ? Math.round((houseData[houseData.length - 1] / houseData[0] - 1) * 100) : 0;
-    const aptTrend = aptData ? Math.round((aptData[aptData.length - 1] / aptData[0] - 1) * 100) : 0;
+    const houseTrend = (hData.length > 0 && hData[0] !== 0) ? Math.round((hData[hData.length - 1] / hData[0] - 1) * 100) : 0;
+    const aptTrend = (aData.length > 0 && aData[0] !== 0) ? Math.round((aData[aData.length - 1] / aData[0] - 1) * 100) : 0;
 
     return `
         <div class="flex flex-col gap-3 my-2 p-3 bg-white/40 backdrop-blur-md rounded-xl border border-white/50 shadow-xs">
             <div class="flex justify-between items-center">
                 <span class="text-[8px] text-slate-500 font-black uppercase tracking-widest">Évolution 5 ans</span>
                 <div class="flex gap-2">
-                    ${houseData && houseData.some(v => v > 0) ? `
+                    ${hData.some(v => v > 0) ? `
                     <div class="flex items-center gap-1">
                         <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
                         <span class="text-[7px] font-black text-emerald-700">Maisons (${houseTrend >= 0 ? '+' : ''}${houseTrend}%)</span>
                     </div>` : ''}
-                    ${aptData && aptData.some(v => v > 0) ? `
+                    ${aData.some(v => v > 0) ? `
                     <div class="flex items-center gap-1">
                         <div class="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
                         <span class="text-[7px] font-black text-indigo-700">Apparts (${aptTrend >= 0 ? '+' : ''}${aptTrend}%)</span>
@@ -6731,76 +6248,174 @@ window.renderHistoricalTrend = function (houseData, aptData) {
 window.prebuiltMarkers = {};
 
 window.buildAllMarkersOnce = function () {
+    console.log("🏗️ Building MapLibre POI Sources...");
     if (!window.pointsByInsee) return;
 
-    console.time("Création des marqueurs Leaflet en mémoire");
+    const collections = {
+        stations: { type: 'FeatureCollection', features: [] },
+        schools: { type: 'FeatureCollection', features: [] },
+        commerces: { type: 'FeatureCollection', features: [] },
+        amenities: { type: 'FeatureCollection', features: [] }
+    };
+
+    const auraCollections = {
+    };
+
 
     Object.entries(window.pointsByInsee).forEach(([insee, points]) => {
-        window.prebuiltMarkers[insee] = {
-            stations: [], schools: [], commerces: [],
-            amenities: [], sport: [], culture: [],
-            marche: [], pediatres: [], mairies: [], riviera: []
-        };
+        ['commerces', 'amenities', 'schools', 'stations'].forEach(cat => {
+            if (points[cat]) {
+                points[cat].forEach(p => {
+                    const lon = p.lon || p.longitude || p.geometry?.coordinates[0];
+                    const lat = p.lat || p.latitude || p.geometry?.coordinates[1];
+                    
+                    if (lon && lat && !isNaN(lon) && !isNaN(lat)) {
+                        const feature = {
+                            type: 'Feature',
+                            geometry: { type: 'Point', coordinates: [Number(lon), Number(lat)] },
+                            properties: { ...(p.properties || p), insee }
+                        };
+                        collections[cat].features.push(feature);
 
-        const createAndStore = (key, featureList, pointToLayerFn) => {
-            if (!featureList) return;
-            featureList.forEach(f => {
-                const latlng = [f.geometry.coordinates[1], f.geometry.coordinates[0]];
+                        // Premium markers are rendered via renderPremiumMarkers
 
-                // Exclusion spécifique pour les gares (lignes du GPE gérées ailleurs)
-                if (key === 'stations') {
-                    const line = (f.properties.indice_lig || "").toString();
-                    if (['15', '16', '17', '18'].includes(line)) return;
-                }
-
-                const marker = pointToLayerFn(f, latlng);
-                if (marker) {
-                    // On attache les propriétés utiles directement au marqueur pour filtrer super vite plus tard
-                    marker._featureCategory = (f.properties.category || '').toLowerCase();
-                    marker._featureType = (f.properties.type || '').toLowerCase();
-                    marker._isBio = f.properties.is_biocoop || f.properties.is_naturalia || (f.properties.name || '').toLowerCase().includes('bio');
-                    marker._isPicard = f.properties.is_picard || (f.properties.name || '').toLowerCase().includes('picard');
-
-                    // PRE-CALCULATE SPATIAL STATUS (Optimization)
-                    if (window.cityCentersData && typeof turf !== 'undefined') {
-                        const point = turf.point([latlng[1], latlng[0]]);
-                        marker._isInPole = window.cityCentersData.features.some(f => turf.booleanPointInPolygon(point, f));
-                    } else {
-                        marker._isInPole = false;
                     }
-
-                    window.prebuiltMarkers[insee][key].push(marker);
-                }
-            });
-        };
-
-        createAndStore('stations', points.stations, window.stationPointToLayer);
-        createAndStore('schools', points.schools, window.schoolPointToLayer);
-        createAndStore('commerces', points.commerces, window.commercePointToLayer);
-        createAndStore('amenities', points.amenities, window.amenityPointToLayer);
-        createAndStore('sport', points.sport, window.amenityPointToLayer);
-        createAndStore('culture', points.culture, window.amenityPointToLayer);
-        createAndStore('marche', points.marche, window.marchePointToLayer);
-        createAndStore('riviera', points.riviera, window.rivieraPointToLayer);
-        // Les pédiatres et mairies ont une structure légèrement différente dans votre code actuel,
-        // mais le principe reste le même si vous les avez dans pointsByInsee.
+                });
+            }
+        });
     });
 
-    console.timeEnd("Création des marqueurs Leaflet en mémoire");
+    // Update MapLibre Sources
+    Object.keys(collections).forEach(cat => {
+        const source = map.getSource(cat);
+        if (source) source.setData(collections[cat]);
+    });
+
+    Object.keys(auraCollections).forEach(cat => {
+        const source = map.getSource(cat);
+        if (source) source.setData(auraCollections[cat]);
+    });
+
+    console.log("✅ MapLibre POI Sources Ready");
 };
 
-// --- MODULAR CRITERIA BUILDER ---
+window.premiumMarkers = { stations: [], schools: [], cityCenters: [] };
+
+window.renderPremiumMarkers = function (type) {
+    if (!window.map) return;
+    
+    // Clear existing premium markers for this type
+    if (window.premiumMarkers[type]) {
+        window.premiumMarkers[type].forEach(m => m.remove());
+        window.premiumMarkers[type] = [];
+    }
+
+    const show = (type === 'cityCenters') ? document.getElementById('show-centre-ville')?.checked :
+                 (type === 'stations') ? document.getElementById('show-stations')?.checked :
+                 (type === 'schools') ? document.getElementById('show-schools')?.checked : false;
+
+    if (!show) return;
+
+    const zoom = window.map.getZoom();
+    if (zoom < 11.5 && type !== 'cityCenters') return; // Don't show many markers if zoomed out
+
+    let data = [];
+    if (type === 'cityCenters') {
+        data = (window.cityCentersData?.features || []).map(f => {
+            const centroid = turf.centroid(f).geometry.coordinates;
+            return {
+                ...f.properties,
+                lat: centroid[1],
+                lon: centroid[0],
+                icon: (f.properties.persona === 'Cœur Historique') ? '🏺' : (f.properties.persona === 'Pôle de Mobilité') ? '🚉' : '📍'
+            };
+        });
+    } else if (type === 'stations') {
+        // Get stations from window.allStationsData or buildAllMarkersOnce collections
+        // For simplicity, we can use the source data
+        const source = window.map.getSource('stations');
+        if (source) data = source._data.features.map(f => ({ ...f.properties, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }));
+    } else if (type === 'schools') {
+        const source = window.map.getSource('schools');
+        if (source) data = source._data.features.map(f => ({ ...f.properties, lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }));
+    }
+
+    data.forEach(p => {
+        // Only show markers in viewport for performance if it's not city centers
+        if (type !== 'cityCenters') {
+            const bounds = window.map.getBounds();
+            if (!bounds.contains([p.lon, p.lat])) return;
+        }
+
+        const el = document.createElement('div');
+        let color = '#3b82f6';
+        let label = '';
+        let icon = p.icon || '📍';
+
+        if (type === 'schools') {
+            color = '#f59e0b';
+            const cat = (p.category || "").toLowerCase();
+            if (cat.includes('maternelle')) { color = '#ec4899'; label = 'M'; }
+            else if (cat.includes('élémentaire')) { color = '#10b981'; label = 'E'; }
+            else if (cat.includes('collège')) { color = '#3b82f6'; label = 'C'; }
+            else if (cat.includes('lycée')) { color = '#f59e0b'; label = 'L'; }
+            else label = 'A';
+            icon = '🏫';
+        } else if (type === 'stations') {
+            const lines = String(p.lines || "").split(/[,\/;]/).map(l => l.trim());
+            if (lines.length > 0 && idfmColors[lines[0]]) {
+                color = idfmColors[lines[0]].bg;
+            }
+            icon = (p.mode === 'METRO') ? '🚇' : '🚆';
+            label = lines[0] || '';
+        } else if (type === 'cityCenters') {
+            const personaStyles = {
+                "Pôle de Mobilité": '#8b5cf6',
+                "Cœur Historique": '#f59e0b',
+                "Axe Commerçant": '#ea580c',
+                "Quartier Culturel": '#ec4899',
+                "Pôle de Vie": '#10b981'
+            };
+            color = personaStyles[p.persona] || '#10b981';
+            label = p.name || p.NOM || 'Centre';
+        }
+
+        el.className = `premium-marker pastille-${type}`;
+        el.innerHTML = `
+            <div class="marker-pill" style="background: ${color}; color: white; border: 2px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 99px; padding: 4px 10px; display: flex; items-center gap: 6px; font-size: 11px; font-weight: 800; white-space: nowrap;">
+                <span class="marker-icon">${icon}</span>
+                <span class="marker-label">${label}</span>
+            </div>
+        `;
+
+        const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([p.lon, p.lat])
+            .addTo(window.map);
+        
+        window.premiumMarkers[type].push(marker);
+    });
+};
+
+
 class CriteriaBuilder {
     constructor() {
+
+
         this.criteria = [];
         this._container = null;
         this.properties = {
             'type': { label: 'Type de Bien', icon: '🏠', operators: ['est'], options: ['Maison', 'Appartement'] },
             'jardin': { label: 'Jardin', icon: '🌳', operators: ['est'], options: ['Oui', 'Non'] },
-            'surface': { label: 'Surface min', icon: '📏', operators: ['>'], options: ['0-40m²', '40-60m²', '60-80m²', '80-100m²', '100-120m²', '120m²+'] },
+            'surface': { label: 'Surface min', icon: '📏', operators: ['>'], options: ['<30m2', '30-40m2', '40-60m2', '60-80m2', '80-100m2', '100-120m2', '120m2+'] },
             'budget': { label: 'Budget max', icon: '💰', operators: ['<'], unit: '€' },
             'commute': { label: 'Trajet', icon: '🕒', operators: ['<'], unit: 'min' },
+            'demo': {
+                label: 'Démographie', icon: '👨‍👩‍👧‍👦', operators: ['est'], options: [
+                    'Jeune & Dynamique', 'Familles & Actifs', 'Résidentiel Mature', 'Calme & Séniors'
+                ]
+            },
             'vibe': {
+
                 label: 'Ambiance', icon: '✨', operators: ['est'], options: [
                     'Le Village Urbain', 'Le Standing Patrimonial', 'La Riviera (Bords de l\'Eau)',
                     'Le Coteau résidentiel', 'Le Néo-Résidentiel', 'Le Faubourg / Maison de Ville', 'Le Pavillonnaire Familial'
@@ -6817,7 +6432,7 @@ class CriteriaBuilder {
                 
                 // 2. 120m2+
                 this.addCriterion('surface');
-                this.updateCriterion(this.criteria[this.criteria.length - 1].id, 'value', '120m²+');
+                this.updateCriterion(this.criteria[this.criteria.length - 1].id, 'value', '120m2+');
 
                 // 3. Jardin: Oui
                 this.addCriterion('jardin');
@@ -6901,13 +6516,14 @@ class CriteriaBuilder {
 
     render() {
         const container = this.container;
+        console.log("CriteriaBuilder.render() - container:", !!container, "criteria count:", this.criteria.length);
         if (!container) return;
 
         const icons = {
-            budget: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="13" r="7" fill="#fef08a"/><circle cx="11" cy="11" r="7" stroke="#0d1c40" stroke-width="2" fill="white"/><path d="M13 9C12 8.5 10.5 8.5 9.5 9.5C8.5 10.5 8.5 12 9.5 13" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/><path d="M8 10H11M8 12H11" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
-            commute: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="13" r="7" fill="#fef08a"/><circle cx="11" cy="11" r="7" stroke="#0d1c40" stroke-width="2" fill="white"/><path d="M11 7V11L13 13" stroke="#0d1c40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 2V4" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
-            type: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 11L12 4L19 11V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V11Z" fill="#fef08a" transform="translate(2, 2)"/><path d="M3 9L11 2L19 9V17C19 18.1046 18.1046 19 17 19H5C3.89543 19 3 18.1046 3 17V9Z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M8 19V13H14V19" stroke="#0d1c40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-            jardin: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 8C16 5.23858 13.7614 3 11 3C8.23858 3 6 5.23858 6 8C3.79086 8 2 9.79086 2 12C2 14.2091 3.79086 16 6 16H16C18.2091 16 20 14.2091 20 12C20 9.79086 18.2091 8 16 8Z" fill="#fef08a" transform="translate(2, 2)"/><path d="M11 21V14" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/><path d="M16 8C16 5.23858 13.7614 3 11 3C8.23858 3 6 5.23858 6 8C3.79086 8 2 9.79086 2 12C2 14.2091 3.79086 16 6 16H16C18.2091 16 20 14.2091 20 12C20 9.79086 18.2091 8 16 8Z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`,
+            budget: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none"><circle cx="13" cy="13" r="7" fill="#fef08a"/><circle cx="11" cy="11" r="7" stroke="#0d1c40" stroke-width="2" fill="white"/><path d="M13 9C12 8.5 10.5 8.5 9.5 9.5C8.5 10.5 8.5 12 9.5 13" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/><path d="M8 10H11M8 12H11" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
+            commute: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none"><circle cx="13" cy="13" r="7" fill="#fef08a"/><circle cx="11" cy="11" r="7" stroke="#0d1c40" stroke-width="2" fill="white"/><path d="M11 7V11L13 13" stroke="#0d1c40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 2V4" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/></svg>`,
+            type: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none"><path d="M5 11L12 4L19 11V19C19 20.1046 18.1046 21 17 21H7C5.89543 21 5 20.1046 5 19V11Z" fill="#fef08a" transform="translate(2, 2)"/><path d="M3 9L11 2L19 9V17C19 18.1046 18.1046 19 17 19H5C3.89543 19 3 18.1046 3 17V9Z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/><path d="M8 19V13H14V19" stroke="#0d1c40" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+            jardin: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none"><path d="M16 8C16 5.23858 13.7614 3 11 3C8.23858 3 6 5.23858 6 8C3.79086 8 2 9.79086 2 12C2 14.2091 3.79086 16 6 16H16C18.2091 16 20 14.2091 20 12C20 9.79086 18.2091 8 16 8Z" fill="#fef08a" transform="translate(2, 2)"/><path d="M11 21V14" stroke="#0d1c40" stroke-width="2" stroke-linecap="round"/><path d="M16 8C16 5.23858 13.7614 3 11 3C8.23858 3 6 5.23858 6 8C3.79086 8 2 9.79086 2 12C2 14.2091 3.79086 16 6 16H16C18.2091 16 20 14.2091 20 12C20 9.79086 18.2091 8 16 8Z" stroke="#0d1c40" stroke-width="2" fill="white" stroke-linejoin="round"/></svg>`,
             surface: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>`,
             vibe: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
         };
@@ -6993,15 +6609,25 @@ function evaluateCriterion(props, crit) {
             // Bucket-based matching
             if (!props.demo?.surface_dist) return true;
             // Does this IRIS have at least 5% of housing in the target bucket or larger?
-            const buckets = ['0-40m²', '40-60m²', '60-80m²', '80-100m²', '100-120m²', '120m²+'];
-            // Normalize val if it contains the m2 unit
-            const targetLabel = val.includes('m²') ? val : (val === '120+' ? '120m²+' : val);
-            const targetIdx = buckets.indexOf(targetLabel);
+            const buckets = ['<30m2', '30-40m2', '40-60m2', '60-80m2', '80-100m2', '100-120m2', '120m2+'];
+            
+            // Robust normalization for key matching
+            const normalize = (s) => String(s || '').replace(/\s/g, '').replace('²', '2').replace('–', '-').replace('+', '');
+            const targetLabel = normalize(val);
+            const targetIdx = buckets.findIndex(b => normalize(b) === targetLabel);
+
+            if (targetIdx === -1) return true; // Safety
 
             // Check all buckets from targetIdx and above
             let totalPct = 0;
+            const dist = props.demo.surface_dist;
+            const distKeys = Object.keys(dist);
+
             for (let i = targetIdx; i < buckets.length; i++) {
-                totalPct += (props.demo.surface_dist[buckets[i]] || 0);
+                const normB = normalize(buckets[i]);
+                const actualKey = distKeys.find(k => normalize(k) === normB);
+                const valPct = actualKey ? parseFloat(dist[actualKey]) : 0;
+                totalPct += isNaN(valPct) ? 0 : valPct;
             }
             return totalPct >= 5; // Minimum 5% presence
 

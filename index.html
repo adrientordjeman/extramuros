@@ -10,8 +10,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- Leaflet CSS & JS -->
+    <!-- Leaflet (Keeping temporarily for references, will remove later) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- MapLibre GL JS (New Engine) -->
+    <link href='https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src='https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js'></script>
 
     <!-- Leaflet MarkerCluster -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
@@ -130,6 +135,16 @@
                         <input type="checkbox" id="show-gpe-lines" class="sub-mobilite" onchange="updateChildState('mobilite'); updateGPELinesVisibility()">
                         <label for="show-gpe-lines">✨</label>
                     </div>
+                </div>
+            </div>
+            
+            <!-- Trajets Quotidiens -->
+            <div id="pill-group-commute" class="relative group">
+                <div class="layer-pill main-pill" data-tooltip="Trajets Quotidiens">
+                    <input type="checkbox" id="group-commute" onchange="toggleGroup('commute', this.checked)">
+                    <label for="group-commute">
+                        <span class="text-lg">🕒</span>
+                    </label>
                 </div>
             </div>
 
@@ -265,7 +280,18 @@
                 </div>
             </div>
 
+            <!-- Démographie -->
+            <div id="pill-group-demo" class="relative group">
+                <div class="layer-pill main-pill" data-tooltip="Démographie">
+                    <input type="checkbox" id="group-demo" onchange="toggleGroup('demo', this.checked)">
+                    <label for="group-demo">
+                        <span class="text-lg">👨‍👩‍👧‍👦</span>
+                    </label>
+                </div>
+            </div>
+
             <!-- Maps -->
+
             <div id="pill-group-maps" class="relative group">
                 <div class="layer-pill main-pill" data-tooltip="Maps">
                     <input type="checkbox" id="group-maps" onchange="toggleGroup('maps', this.checked)">
@@ -670,7 +696,7 @@
     </div>
 
     <!-- Scripts -->
-    <script src="./main.js"></script>
+    <script type="module" src="./main.js"></script>
 </body>
 
 </html>

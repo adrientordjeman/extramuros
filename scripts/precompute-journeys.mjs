@@ -3,7 +3,8 @@ import path from 'path';
 
 // Bastille and Saint-Lazare exact coordinates
 const TARGETS = {
-    "bastille": { lon: 2.3688, lat: 48.8532 }
+    "bastille": { lon: 2.3688, lat: 48.8532 },
+    "saint_lazare": { lon: 2.3267, lat: 48.8752 }
 };
 
 const API_KEY = "41Yg0ZQ1MuGlIHfwEXrY0vGFhjQKngcv";
@@ -139,8 +140,11 @@ async function run() {
         const { insee } = item;
         if (!insee || insee === "undefined") return false;
 
-        // Skip if already has both main and alternate for Bastille
-        if (precomputed[insee]?.bastille?.main && precomputed[insee]?.bastille?.alternate) {
+        // Skip only if we have both targets fully computed
+        const hasBastille = precomputed[insee]?.bastille?.main && precomputed[insee]?.bastille?.alternate;
+        const hasSaintLazare = precomputed[insee]?.saint_lazare?.main && precomputed[insee]?.saint_lazare?.alternate;
+        
+        if (hasBastille && hasSaintLazare) {
             skipped++;
             return false;
         }
